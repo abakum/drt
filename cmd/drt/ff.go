@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
-	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -25,15 +23,18 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 	}
 	// Может установлен ffmpeg новей и быстрей чем wasm version n5.1.6
 	if path, err := exec.LookPath(bin); err == nil {
-		log.Println(path, err, "path, err")
+		// log.Println(path, err, "path, err")
 		if exe, err := os.Executable(); err == nil {
-			log.Println(exe, err, "exe, err")
+			// log.Println(exe, err, "exe, err")
 			if resolved, err := filepath.EvalSymlinks(path); err == nil && resolved != exe {
-				log.Println(resolved, err, "resolved, err")
+				// log.Println(resolved, err, "resolved, err")
 				qArgs[0] = path
-				log.Output(3, strings.Join(qArgs, " "))
+				if bin != "ffprobe" {
+					log.Output(3, strings.Join(qArgs, " "))
+				}
 
 				cmd := exec.CommandContext(ctx, path, args...)
+				cmd.Dir = root
 				cmd.Stdin = os.Stdin
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
@@ -97,40 +98,4 @@ func probeV(dir, base string) {
 	if err != nil {
 		log.Println("bit_rate=?", err, "код завершения", "ffprobe", rc)
 	}
-}
-
-const (
-	DIRMODE  = 0755
-	FILEMODE = 0644
-)
-
-func isFileExist(path string) bool {
-	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-		return false
-	}
-	return true
-}
-
-func AntiLoop() (cleanUp func()) {
-	e, err := os.Executable()
-	// path/type.exe
-	if err != nil {
-		e = "started"
-		// type
-	} else {
-		e = filepath.Base(e)
-		// type.exe
-		e = strings.Split(e, ".")[0]
-		// type
-	}
-	tmp := os.TempDir()
-	antiLoop := filepath.Join(tmp, e)
-	if isFileExist(antiLoop) {
-		return
-	}
-	os.MkdirAll(tmp, DIRMODE)
-	if os.WriteFile(antiLoop, []byte{}, FILEMODE) == nil {
-		return func() { os.Remove(antiLoop) }
-	}
-	return
 }

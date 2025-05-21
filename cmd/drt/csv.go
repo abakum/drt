@@ -8,6 +8,14 @@ import (
 	"strings"
 )
 
+var (
+	CSVs,
+	albums,
+	titles,
+	results []string
+	tlTags []Tags
+)
+
 type Row struct {
 	head map[string]int
 	vals []string
@@ -50,7 +58,7 @@ func isFirstAfterSecond(first, second string) bool {
 	return false
 }
 
-func (t *Tags) timeLine(album, in, file string) {
+func (t *Tags) timeLine(album, in, file, CSV string) {
 	var (
 		mp3    = file + ".mp3"
 		inMp3  = filepath.Join(in, mp3)
@@ -101,7 +109,7 @@ func (t *Tags) timeLine(album, in, file string) {
 			// .mov
 			// .mp4
 			base := filepath.Base(res.Name())
-			log.Println("Результат в", base, ". Создаём .alac.mov, mp3, flac")
+			log.Println("Результат в", base, "Создаём alac.mov, mp3, flac")
 			rs, err := run(ctx, "ffmpeg", in,
 				"-hide_banner",
 				"-v", "error",
@@ -114,7 +122,7 @@ func (t *Tags) timeLine(album, in, file string) {
 				res.Close()
 				log.Println("Удаляем", res.Name(), os.Remove(res.Name()))
 			} else {
-				log.Println("Не удалось создать файлы .alac.mov, flac, mp3", err, "код завершения", rs)
+				log.Println("Не удалось создать файлы alac.mov, flac, mp3", err, "код завершения", rs)
 			}
 		}
 	} else {
@@ -125,19 +133,22 @@ func (t *Tags) timeLine(album, in, file string) {
 		t.add("Тэги из "+inAlac, readTags(inAlac))
 	}
 
-	if len(os.Args) > 2 {
-		t.add("Тэги из командной строки", newTags(os.Args[2:]...))
+	if argsTags {
+		t.set("Тэги из командной строки", newTags(etc...))
 	}
 	t.parse(album, file)
-
-	if len(*t) == 0 {
-		return
-	}
 
 	for i, args1 := range []string{inAlac, inFlac, inMp3} {
 		f, err := os.Open(args1)
 		if err == nil {
-			t.write(args1)
+			CSVs = append(CSVs, CSV)
+			albums = append(albums, album)
+			titles = append(titles, file)
+			results = append(results, args1)
+			tlTags = append(tlTags, *t)
+			if len(*t) > 0 {
+				t.write(args1)
+			}
 			if i == 0 {
 				probe(filepath.Dir(args1), filepath.Base(args1))
 			} else {

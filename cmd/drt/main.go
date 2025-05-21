@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -18,17 +19,13 @@ import (
 )
 
 var (
-	ctx  context.Context
-	cncl context.CancelFunc
+	ctx      context.Context
+	cncl     context.CancelFunc
+	argsTags bool
+	etc      []string
 )
 
 func main() {
-	// if cleanUp := AntiLoop(); cleanUp != nil {
-	// 	defer cleanUp()
-	// } else {
-	// 	return
-	// }
-
 	log.SetFlags(log.Lshortfile)
 	ctx, cncl = signal.NotifyContext(
 		context.Background(),
@@ -36,10 +33,6 @@ func main() {
 		syscall.SIGTERM,
 	)
 	defer cncl()
-	defer func() {
-		fmt.Print("\r\nЖми <Enter>")
-		os.Stdin.Read([]byte{0})
-	}()
 
 	// a/b.c
 	args0 := filepath.Base(os.Args[0])
@@ -157,7 +150,7 @@ Movement=Адажио
 	// drt file... fileX param... paramY
 	files := []string{}
 	// [file... fileX]
-	etc := []string{}
+	etc = []string{}
 	// [param... paramY]
 	for _, args1 := range os.Args[1:] {
 		args1, err := filepath.Abs(args1)
@@ -174,21 +167,12 @@ Movement=Адажио
 	if len(os.Args) > 1+len(files) {
 		etc = os.Args[1+len(files):]
 	}
+	argsTags = strings.Contains(strings.Join(etc, " "), "=")
 
 	for _, args1 := range files {
 		// Выводим сведения о  args1
-		// a/b/c.d
-		out := filepath.Dir(args1)
-		// a/b
-		album := filepath.Base(out)
-		// b
-
-		ext := filepath.Ext(args1)
-
-		title := filepath.Base(args1)
-		title = strings.TrimSuffix(title, ext)
-
-		if strings.ToLower(ext) == ".csv" {
+		out, album, ext, title := oaet(args1)
+		if ext == ".csv" {
 			out = filepath.Dir(out)
 			// a
 
@@ -260,7 +244,7 @@ Movement=Адажио
 				}
 				resTags := newTags()
 				resTags.csv(file, row, "Description", "Keywords", "Comments")
-				resTags.timeLine(album, out, file)
+				resTags.timeLine(album, out, file, args1)
 			}
 			f.Close()
 			csvTags.print(2, "Тэги из "+args1, false)
@@ -270,12 +254,89 @@ Movement=Адажио
 		// Это не csv
 		fileTags := newTags()
 		fileTags.add("Тэги из "+args1, readTags(args1))
-		if len(os.Args) > 2 {
-			fileTags.add("Тэги из командной строки", newTags(etc...))
+
+		if argsTags {
+			fileTags.set("Тэги из командной строки", newTags(etc...))
 			fileTags.parse(album, title)
 			fileTags.write(args1)
 		}
 		probe(filepath.Dir(args1), filepath.Base(args1))
 		probeA(args1, true)
 	}
+	lines := []string{}
+	comments := []string{}
+	if len(etc) == 0 {
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Println("Введи тэг=значение построчно:")
+		for {
+			line, err := reader.ReadString('\n')
+			line = strings.TrimSpace(line)
+			noSpace := strings.Join(strings.Fields(line), "")
+			noSpace = strings.ToLower(noSpace)
+			if strings.HasPrefix(noSpace, "comment=") && noSpace != "comment=" {
+				comments = append(comments, line)
+				for {
+					line, err = reader.ReadString('\n')
+					line = strings.TrimSpace(line)
+					if err == nil && line != "" && !strings.Contains(line, "=") {
+						comments = append(comments, line)
+						continue
+					}
+					break
+				}
+				commentLine := strings.Join(comments, "/")
+				comments = []string{}
+				if strings.Contains(line, "=") {
+					lines = append(lines, commentLine)
+				} else {
+					line = commentLine
+				}
+			}
+			if err == nil && strings.Contains(line, "=") {
+				lines = append(lines, line)
+				continue
+			}
+			break
+		}
+	}
+	if len(lines) > 0 {
+		for _, args1 := range files {
+			_, album, ext, title := oaet(args1)
+			if ext == ".csv" {
+				continue
+			}
+			fileTags := newTags()
+			// fileTags.add("Тэги из файла "+args1, readTags(args1))
+			fileTags.add("", readTags(args1))
+			// fileTags.set("Тэги из построчного ввода", newTags(lines...))
+			fileTags.set("", newTags(lines...))
+			fileTags.parse(album, title)
+			fileTags.write(args1)
+		}
+		for i, args1 := range results {
+			fileTags := newTags()
+			// fileTags.add("Тэги из клипа "+titles[i]+" в "+CSVs[i], tlTags[i])
+			fileTags.add("", tlTags[i])
+			// fileTags.add("Тэги из построчного ввода", newTags(lines...))
+			fileTags.add("", newTags(lines...))
+			fileTags.parse(albums[i], titles[i])
+			fileTags.write(args1)
+		}
+	}
+}
+
+func oaet(args1 string) (out, album, ext, title string) {
+	// a/b/c.d
+	out = filepath.Dir(args1)
+	// a/b
+	album = filepath.Base(out)
+	// b
+	ext = filepath.Ext(args1)
+	// .d
+	title = filepath.Base(args1)
+	// c.d
+	title = strings.TrimSuffix(title, ext)
+	// c
+	ext = strings.ToLower(ext)
+	return
 }
