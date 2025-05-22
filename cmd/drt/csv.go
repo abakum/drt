@@ -9,7 +9,6 @@ import (
 )
 
 var (
-	CSVs,
 	albums,
 	titles,
 	results []string
@@ -58,7 +57,7 @@ func isFirstAfterSecond(first, second string) bool {
 	return false
 }
 
-func (t *Tags) timeLine(album, in, file, CSV string) {
+func (t *Tags) timeLine(album, in, file string) {
 	var (
 		mp3    = file + ".mp3"
 		inMp3  = filepath.Join(in, mp3)
@@ -71,11 +70,11 @@ func (t *Tags) timeLine(album, in, file, CSV string) {
 		alac   = file + ".alac.mov"
 		inAlac = filepath.Join(in, alac)
 	)
-	res, err := os.Open(inMov) // удерживаем
+	res, err := open(inMov) // удерживаем
 	if err != nil {
-		res, err = os.Open(inMp4)
+		res, err = open(inMp4)
 		if err != nil {
-			res, err = os.Open(inAlac)
+			res, err = open(inAlac)
 			if err != nil {
 				log.Println("Нет результата в mov c lpcm", inMov)
 				log.Println("Нет результата в mp4 c flac", inMp4)
@@ -129,23 +128,21 @@ func (t *Tags) timeLine(album, in, file, CSV string) {
 		log.Println("Файлы flac, mp3 моложе чем", res.Name())
 	}
 
-	if len(*t) == 0 {
-		t.add("Тэги из "+inAlac, readTags(inAlac))
-	}
-
 	if argsTags {
 		t.set("Тэги из командной строки", newTags(etc...))
 	}
 	t.parse(album, file)
 
 	for i, args1 := range []string{inAlac, inFlac, inMp3} {
-		f, err := os.Open(args1)
+		f, err := open(args1)
 		if err == nil {
-			CSVs = append(CSVs, CSV)
-			albums = append(albums, album)
-			titles = append(titles, file)
-			results = append(results, args1)
-			tlTags = append(tlTags, *t)
+			if !argsTags {
+				// Пригодится после консольного ввода тэгов
+				albums = append(albums, album)
+				titles = append(titles, file)
+				results = append(results, args1)
+				tlTags = append(tlTags, *t)
+			}
 			if len(*t) > 0 {
 				t.write(args1)
 			}

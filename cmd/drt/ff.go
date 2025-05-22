@@ -92,7 +92,7 @@ func probeV(dir, base string) {
 		"-v", "error",
 		"-select_streams", "v:0",
 		"-show_entries", "stream=bit_rate,duration",
-		"-of", "default=noprint_wrappers=1", //:nokey=1
+		"-of", "default=noprint_wrappers=1",
 		base,
 	)
 	if err != nil {

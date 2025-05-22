@@ -100,7 +100,7 @@ func main() {
 		ext := filepath.Ext(exe)
 		for _, ff := range []string{"ffmpeg", "ffprobe"} {
 			ffe := filepath.Join(dir, ff) + ext
-			f, err := os.Open(ffe)
+			f, err := open(ffe)
 			if err == nil {
 				f.Close()
 			} else {
@@ -115,35 +115,7 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		fmt.Print(`Например: 20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор
-Вот классические тэги:
-Date=Дата записи как 20250227
-Album=Запись как 20250227 Классный концерт
-TrackNumber=Номер произведения как 02
-Composer=Композитор как Шопен
-Title=Название произведение как Баллада для фортепиано № 1 соль минор
-MovementNumber=Если части произведения то их номера
-Movement=Если части произведения то их названия
-Artist=Исполнители как Юлия Абакумова
-AlbumArtist=Остальные исполнители кроме солиста
-Conductor=Руководители солиста как Владимир Дайч или оркестра или концертмейстер
-Comment=Комментарий
-Genre=Classical
-InitialKey=Тональность как Gm. До-диез мажор как C#. Си-бемоль минор как Bbm. Си мажор как B.
-InvolvedPeople=Остальные причастные к записи как РГК им С. В. Рахманинова
-Lyricist=Авторы текста и переводчики
-Arranger=Авторы переложения или оранжировки
-Subtitle=Подзаголовок как Патетическая соната
-Work=Авторские публикации или каталоги как BWV или opus posthumum как Op. 21
-Grouping=Группировки, например для музыкальных форм как Баллады для фортепиано
-Если значений правее = несколько повторяйте строчки. Например:
-MovementNumber=1
-Movement=Скерцо
-MovementNumber=2
-Movement=Адажио
-
-Остальные тэги https://taglib.org/api/p_propertymapping.html
-Расширенно по mp3 https://id3.org/id3v2.3.0`)
+		help()
 		return
 	}
 
@@ -157,13 +129,18 @@ Movement=Адажио
 		if err != nil {
 			break
 		}
-		f, err := os.Open(args1)
+		f, err := open(args1)
 		if err != nil {
 			break
 		}
 		f.Close()
 		files = append(files, args1)
 	}
+	if len(files) < 1 {
+		help()
+		return
+	}
+
 	if len(os.Args) > 1+len(files) {
 		etc = os.Args[1+len(files):]
 	}
@@ -176,7 +153,7 @@ Movement=Адажио
 			out = filepath.Dir(out)
 			// a
 
-			f, err := os.Open(args1)
+			f, err := open(args1)
 			if err != nil {
 				log.Fatalln("Ошибка открытия", err)
 				continue
@@ -244,7 +221,7 @@ Movement=Адажио
 				}
 				resTags := newTags()
 				resTags.csv(file, row, "Description", "Keywords", "Comments")
-				resTags.timeLine(album, out, file, args1)
+				resTags.timeLine(album, out, file)
 			}
 			f.Close()
 			csvTags.print(2, "Тэги из "+args1, false)
@@ -257,70 +234,55 @@ Movement=Адажио
 
 		if argsTags {
 			fileTags.set("Тэги из командной строки", newTags(etc...))
-			fileTags.parse(album, title)
+		}
+		fileTags.parse(album, title)
+		if len(fileTags) > 0 {
 			fileTags.write(args1)
 		}
 		probe(filepath.Dir(args1), filepath.Base(args1))
 		probeA(args1, true)
 	}
-	lines := []string{}
-	comments := []string{}
+	if argsTags {
+		// drt file tag=
+		return
+	}
+	// drt file foo
+	// drt file
 	if len(etc) == 0 {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Println("Введи тэг=значение построчно:")
+		// drt file
+		r := bufio.NewReader(os.Stdin)
+		fmt.Println("Введи тэг=значение:")
 		for {
-			line, err := reader.ReadString('\n')
-			line = strings.TrimSpace(line)
-			noSpace := strings.Join(strings.Fields(line), "")
-			noSpace = strings.ToLower(noSpace)
-			if strings.HasPrefix(noSpace, "comment=") && noSpace != "comment=" {
-				comments = append(comments, line)
-				for {
-					line, err = reader.ReadString('\n')
-					line = strings.TrimSpace(line)
-					if err == nil && line != "" && !strings.Contains(line, "=") {
-						comments = append(comments, line)
-						continue
-					}
-					break
-				}
-				commentLine := strings.Join(comments, "/")
-				comments = []string{}
-				if strings.Contains(line, "=") {
-					lines = append(lines, commentLine)
-				} else {
-					line = commentLine
-				}
-			}
-			if err == nil && strings.Contains(line, "=") {
-				lines = append(lines, line)
+			s, err := r.ReadString('\n')
+			s = strings.TrimSpace(s)
+			if err == nil && s != "" {
+				etc = append(etc, s)
 				continue
 			}
 			break
 		}
+	} else {
+		// drt file foo
+		return
 	}
-	if len(lines) > 0 {
-		for _, args1 := range files {
-			_, album, ext, title := oaet(args1)
+	// log.Println(etc)
+	if len(etc) > 0 {
+		for _, file := range files {
+			_, album, ext, title := oaet(file)
 			if ext == ".csv" {
 				continue
 			}
-			fileTags := newTags()
-			// fileTags.add("Тэги из файла "+args1, readTags(args1))
-			fileTags.add("", readTags(args1))
-			// fileTags.set("Тэги из построчного ввода", newTags(lines...))
-			fileTags.set("", newTags(lines...))
-			fileTags.parse(album, title)
-			fileTags.write(args1)
+			t := readTags(file)
+			t.set("Консольный ввод", newTags(etc...))
+			// t.print(3, "Вот что пишем", false)
+			t.parse(album, title)
+			t.write(file)
 		}
-		for i, args1 := range results {
-			fileTags := newTags()
-			// fileTags.add("Тэги из клипа "+titles[i]+" в "+CSVs[i], tlTags[i])
-			fileTags.add("", tlTags[i])
-			// fileTags.add("Тэги из построчного ввода", newTags(lines...))
-			fileTags.add("", newTags(lines...))
-			fileTags.parse(albums[i], titles[i])
-			fileTags.write(args1)
+		for i, result := range results {
+			t := tlTags[i]
+			t.set("Консольный ввод", newTags(etc...))
+			t.parse(albums[i], titles[i])
+			t.write(result)
 		}
 	}
 }
@@ -339,4 +301,71 @@ func oaet(args1 string) (out, album, ext, title string) {
 	// c
 	ext = strings.ToLower(ext)
 	return
+}
+
+func help() {
+	fmt.Print(`drt file [...fileN] [tag1=val1 [...tagN=valN]]
+Где file...fileN это медиафайлы или файлы .csv от DaVinci Resolve c Description или Keywords в которых указаны тэги.
+Если в каталоге "\2025\20250227 Классный концерт" будет файл "02.csv" c таймлайн "20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор"
+и клипы с незжатым звуком в "\2025\20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор.mov" или 
+"\2025\20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор.mp4"
+то после запуска "drt 02.csv" вместо них создадутся файлы:
+"20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор.alac.mov"
+"20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор.flac"
+"20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор.mp3"
+с тэгами:
+Date=20250227
+Album=0250227 Классный концерт
+TrackNumber=02
+Composer=Шопен
+Title=Баллада для фортепиано № 1 соль минор
+InitialKey=Gm
+Используется английская нотация где cи мажор как B, си-бемоль минор как Bbm, до-диез мажор как C.
+В Description или Keywords для классики можно указать:
+Composer=Фридерик Шопен
+MovementNumber=Если части произведения то их номера
+Movement=Если части произведения то их названия
+Artist=Иван Петров
+AlbumArtist=Остальные исполнители кроме солиста
+Conductor=Руководители солиста или оркестра или концертмейстер
+Genre=Classical
+InvolvedPeople=Остальные люди и группы причастные к записи как РГК им С. В. Рахманинова
+Lyricist=Авторы текста и переводчики
+Arranger=Авторы переложения или оранжировки
+Subtitle=Подзаголовок как Патетическая соната
+Work=Авторские публикации или каталоги как BWV или opus posthumum как Op. 21
+Grouping=Группировки, например для музыкальных форм как Баллады для фортепиано
+Если тэг один а значений несколько просто повторяйте строчки. Например:
+MovementNumber=1
+MovementNumber=2
+Или через / Например:
+MovementNumber=1/2
+Movement=Скерцо/Адажио
+Artist=Иван Петров/Пётр Сидоров
+
+Остальные тэги https://taglib.org/api/p_propertymapping.html
+Расширенно про mp3 https://id3.org/id3v2.3.0
+Страничка drTags https://github.com/abakum/drt
+`)
+	if runtime.GOOS != "windows" {
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	ucd, err := os.UserConfigDir()
+	if err != nil {
+		return
+	}
+	drTags := filepath.Join(ucd, `Microsoft\Windows\SendTo`, "drTags.cmd")
+	f, err := open(drTags)
+	if err == nil {
+		f.Close()
+		return
+	}
+	err = os.WriteFile(drTags, []byte(exe+" %*"), 0666)
+	if err == nil {
+		log.Println(`Добавил drTags в меню Sendto. Можно поправить "start shell:sendto"`)
+	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -44,6 +45,8 @@ func readTags(fName string) (tags Tags) {
 	if err != nil {
 		log.Output(3, fmt.Sprintln("Ошибка чтения тэгов", err))
 	}
+	tags.fixKey()
+	tags.fixVal()
 	return
 }
 
@@ -82,8 +85,13 @@ func (t *Tags) set(title string, tags Tags) {
 func (t *Tags) fixVal() {
 	tags := newTags()
 	for k, vals := range *t {
-		k := strings.ToLower(k)
+		k := strings.ToUpper(k)
 		k = strings.TrimSpace(k)
+		if k == taglib.Comment {
+			// Комментарии не трогаем
+			tags[k] = vals
+			continue
+		}
 		has := make(map[string]bool)
 		uniqs := []string{}
 		for _, val := range vals {
@@ -117,16 +125,16 @@ func (t *Tags) delEmpty() {
 // tag= Tag=b ~> tag=
 func (t *Tags) fixKey() {
 	var block = map[string]bool{
-		"encoding":          true,
-		"encoder":           true,
-		"compatible_brands": true,
-		"minor_version":     true,
-		"major_brand":       true,
-		"creation_time":     true,
+		"ENCODING":          true,
+		"ENCODER":           true,
+		"COMPATIBLE_BRANDS": true,
+		"MINOR_VERSION":     true,
+		"MAJOR_BRAND":       true,
+		"CREATION_TIME":     true,
 	}
 	tags := newTags()
 	for k, vals := range *t {
-		k := strings.ToLower(k)
+		k := strings.ToUpper(k)
 		k = strings.TrimSpace(k)
 		if block[k] {
 			continue
@@ -145,29 +153,31 @@ func (t *Tags) fixKey() {
 // Чтоб очистить tag=
 func newTags(ss ...string) (tags Tags) {
 	tags = make(Tags)
+	old := taglib.Comment
 	for _, s := range ss {
 		// kvs := strings.Split(s, ",")
 		// "a=b,c",d=e
 		kvs, _ := csv.NewReader(strings.NewReader(s)).Read()
 		for _, kv := range kvs {
 			kva := strings.Split(kv, "=")
-			k := strings.ToLower(kva[0])
-			k = strings.TrimSpace(k)
-			if len(kva) > 1 {
-				if len(kva) > 2 {
-					log.Println("Пропустил", kva[2:])
-				}
-				if kva[1] == "" {
-					tags[k] = nil
-					continue
-				}
-				vals := strings.Split(kva[1], "/")
+			key := strings.ToUpper(kva[0])
+			key = strings.TrimSpace(key)
+			if len(kva) < 2 {
+				key = old
+				kva = []string{key, kva[0]}
+			} else {
+				old = key
+			}
+			for _, val := range kva[1:] {
+				// if val == "" {
+				// 	tags[k] = nil
+				// 	continue
+				// }
+				vals := strings.Split(val, "/")
 				for k, v := range vals {
 					vals[k] = strings.TrimSpace(v)
 				}
-				tags[k] = append(tags[k], vals...)
-			} else {
-				log.Println("Пропустил", kva[0])
+				tags[key] = append(tags[key], vals...)
 			}
 		}
 	}
@@ -176,13 +186,13 @@ func newTags(ss ...string) (tags Tags) {
 
 func (t *Tags) write(args1 string) {
 	t.delEmpty()
-	for _, key := range []string{"description", "comment"} {
+	for _, key := range []string{"DESCRIPTION", taglib.Comment} {
 		vals, ok := t.vals(key)
 		if ok {
 			t.setVals(key, strings.Join(vals, "\n"))
 		}
 	}
-	t.setVals("encoder", "drTags")
+	t.setVals("ENCODER", "drTags")
 
 	t.print(3, "Пишем тэги в "+args1, false)
 	err := taglib.WriteTags(args1, *t, taglib.DiffBeforeWrite|taglib.Clear)
@@ -199,7 +209,7 @@ func (t *Tags) write(args1 string) {
 // Соната си-бемоль мажор ~>Bb.
 // Соната си минор ~>Bm.
 func (t *Tags) tKey(title string) {
-	if _, ok := (*t)["initialkey"]; ok {
+	if _, ok := (*t)[taglib.InitialKey]; ok {
 		return
 	}
 	fields := strings.Fields(strings.ToLower(title))
@@ -279,14 +289,29 @@ loop:
 	t.setVals("initialkey", note+half+minor)
 }
 
+func open(name string) (*os.File, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	i, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if i.IsDir() || i.Size() == 0 {
+		return nil, errors.New("not media file")
+	}
+	return f, nil
+}
+
 func probeA(inFile string, asr bool) {
-	f, err := os.Open(inFile)
+	f, err := open(inFile)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 
-	p, err := taglib.ReadProperties(inFile)
+	p, err := taglib.ReadProperties(f.Name())
 	if err != nil {
 		log.Println("a_bit_rate=?", err)
 		return
@@ -314,14 +339,14 @@ func (t *Tags) kvv(key string, val *string) {
 }
 
 func (t Tags) vals(key string) (ss []string, ok bool) {
-	key = strings.ToLower(key)
+	key = strings.ToUpper(key)
 	key = strings.TrimSpace(key)
 	ss, ok = t[key]
 	return
 }
 
 func (t *Tags) setVals(key string, vals ...string) {
-	key = strings.ToLower(key)
+	key = strings.ToUpper(key)
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return
@@ -331,25 +356,26 @@ func (t *Tags) setVals(key string, vals ...string) {
 		va := strings.Split(val, "/")
 		for _, v := range va {
 			v = strings.TrimSpace(v)
-			if v != "" {
+			if v != "" || key == taglib.Comment {
 				vs = append(vs, v)
 			}
 		}
 	}
+	// log.Println(key, vs)
 	(*t)[key] = vs
 	t.fixVal()
 }
 
 // album/album tracknumber composer title
 func (t *Tags) parse(album, file string) {
-	t.kvv("album", &album)
-	if _, ok := t.vals("date"); !ok {
+	t.kvv(taglib.Album, &album)
+	if _, ok := t.vals(taglib.Date); !ok {
 		date := strings.Fields(album)[0]
 		if _, err := strconv.Atoi(date); err == nil {
 			if len(date) > 7 {
-				t.setVals("date", date[:8])
+				t.setVals(taglib.Date, date[:4], date[:8])
 			} else {
-				t.setVals("date", date[:4])
+				t.setVals(taglib.Date, date[:4])
 			}
 		}
 	}
@@ -361,28 +387,22 @@ func (t *Tags) parse(album, file string) {
 	if _, err := strconv.Atoi(tracknumber); err == nil {
 		title = strings.TrimPrefix(title, tracknumber)
 		title = strings.TrimSpace(title)
-		// log.Println(title)
 		//Моцарт Соната для фортепиано 9 pе мажор
-		if _, ok := t.vals("tracknumber"); !ok {
-			t.setVals("tracknumber", tracknumber)
+		if _, ok := t.vals(taglib.TrackNumber); !ok {
+			t.setVals(taglib.TrackNumber, tracknumber)
 		}
 		composer := strings.Fields(title)[0]
 		if composer != title {
 			title = strings.TrimPrefix(title, composer)
 			title = strings.TrimSpace(title)
-			// log.Println(title)
 			//Соната для фортепиано 9 pе мажор
-			if _, ok := t.vals("composer"); !ok {
-				// tags = addTags("", ssTags("composer="+composer), tags)
-				t.setVals("composer", composer)
+			if _, ok := t.vals(taglib.Composer); !ok {
+				t.setVals(taglib.Composer, composer)
 			}
 		}
 	}
 
-	// kvv("title", &title, tags)
-	t.kvv("title", &title)
-
-	// tKey(title, t)
+	t.kvv(taglib.Title, &title)
 	t.tKey(title)
 }
 
@@ -393,7 +413,6 @@ func (t *Tags) csv(file string, row *Row, keys ...string) {
 	}
 	s += file
 	for _, key := range keys {
-		// val := keyVal(key, header, r)
 		val := row.val(key)
 		if val == "" {
 			continue
@@ -406,12 +425,9 @@ func (t *Tags) csv(file string, row *Row, keys ...string) {
 			if !strings.Contains(val, "=") {
 				continue
 			}
-			// t.add("Тэги из "+key+s, newTags(val))
-			t.add("", newTags(val))
+			t.set("", newTags(val))
 		case "Comments":
-			// log.Output(2, key+" из"+s)
-			// fmt.Println("comment=" + val)
-			t.setVals("comment", val)
+			t.setVals(taglib.Comment, val)
 		}
 	}
 }
