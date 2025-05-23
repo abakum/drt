@@ -306,8 +306,9 @@ func oaet(args1 string) (out, album, ext, title string) {
 func help() {
 	fmt.Print(`drt file [...fileN] [tag1=val1 [...tagN=valN]]
 Где file...fileN это медиафайлы или файлы .csv от DaVinci Resolve c Description или Keywords в которых указаны тэги.
-Если в каталоге "\2025\20250227 Классный концерт" будет файл "02.csv" c таймлайн "20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор"
-и клипы с незжатым звуком в "\2025\20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор.mov" или 
+Если в файле "\2025\20250227 Классный концерт\02.csv" есть таймлайн
+"20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор" и клипы с незжатым звуком в
+"\2025\20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор.mov" или 
 "\2025\20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор.mp4"
 то после запуска "drt 02.csv" вместо них создадутся файлы:
 "20250227 Классный концерт 02 Шопен Баллада для фортепиано № 1 соль минор.alac.mov"
@@ -320,8 +321,8 @@ TrackNumber=02
 Composer=Шопен
 Title=Баллада для фортепиано № 1 соль минор
 InitialKey=Gm
-Используется английская нотация где cи мажор как B, си-бемоль минор как Bbm, до-диез мажор как C.
-В Description или Keywords для классики можно указать:
+Для знаков при ключе используется английская нотация где cи мажор как B, си-бемоль минор как Bbm, до-диез мажор как C#.
+В Description или Keywords таймлайна для классики можно указать:
 Composer=Фридерик Шопен
 MovementNumber=Если части произведения то их номера
 Movement=Если части произведения то их названия
@@ -329,24 +330,55 @@ Artist=Иван Петров
 AlbumArtist=Остальные исполнители кроме солиста
 Conductor=Руководители солиста или оркестра или концертмейстер
 Genre=Classical
-InvolvedPeople=Остальные люди и группы причастные к записи как РГК им С. В. Рахманинова
+InvolvedPeople=Остальные люди и группы причастные к выступлению например РГК им С. В. Рахманинова
 Lyricist=Авторы текста и переводчики
 Arranger=Авторы переложения или оранжировки
-Subtitle=Подзаголовок как Патетическая соната
+Subtitle=Подзаголовок например Патетическая соната
 Work=Авторские публикации или каталоги как BWV или opus posthumum как Op. 21
-Grouping=Группировки, например для музыкальных форм как Баллады для фортепиано
-Если тэг один а значений несколько просто повторяйте строчки. Например:
-MovementNumber=1
-MovementNumber=2
-Или через / Например:
+Grouping=Группировки например для музыкальных форм как Баллады для фортепиано
+Если тэг один а значений несколько просто повторяйте строчки.
+Так пишем в Keywords или Description:
+Artist=Иван Петров
+Artist=Пётр Сидоров
+Или через / в Description:
 MovementNumber=1/2
-Movement=Скерцо/Адажио
-Artist=Иван Петров/Пётр Сидоров
+Или с новой строки в Description:
+Movement=Скерцо
+Адажио
+Если Comments таймлайна не пуст то он запишется в тэг Comment.
+Если в командной строке нет тэгов то их можно ввести в консоле.
+Если в консольном вводе строка не начинается с тэга то это значение к предыдущему тэгу:
+Artist=Иван Петров
+Пётр Сидоров
+Если в консольном вводе первая строка не начинается с тэга то это значение к тэгу Comment
+Завершай консольный ввод пустой строкой. Чтоб ввести пустую строку в Comment введи /
+Чтоб убрать все значение тэга X введи X=. Чтоб убрать значение всех тэгов введи =
 
 Остальные тэги https://taglib.org/api/p_propertymapping.html
 Расширенно про mp3 https://id3.org/id3v2.3.0
 Страничка drTags https://github.com/abakum/drt
 `)
+	swap(os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования",
+		os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить")
+
+}
+
+func yes(s string) (ok bool) {
+	log.Output(3, s+"? y|yes|д|да")
+
+	r := bufio.NewReader(os.Stdin)
+	s, err := r.ReadString('\n')
+	if err != nil {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "y", "yes", "д", "да":
+		return true
+	}
+	return
+}
+
+func swap(userDir func() (string, error), p, m string, userDirM func() (string, error), pM, mM string) {
 	if runtime.GOOS != "windows" {
 		return
 	}
@@ -354,18 +386,44 @@ Artist=Иван Петров/Пётр Сидоров
 	if err != nil {
 		return
 	}
-	ucd, err := os.UserConfigDir()
+	root, err := userDir()
 	if err != nil {
 		return
 	}
-	drTags := filepath.Join(ucd, `Microsoft\Windows\SendTo`, "drTags.cmd")
-	f, err := open(drTags)
-	if err == nil {
-		f.Close()
+	rootM, err := userDirM()
+	if err != nil {
 		return
 	}
-	err = os.WriteFile(drTags, []byte(exe+" %*"), 0666)
+	drt := filepath.Join(root, p, filepath.Base(exe))
+	drtM := filepath.Join(rootM, pM, filepath.Base(exe))
+	f, err := open(drt)
 	if err == nil {
-		log.Println(`Добавил drTags в меню Sendto. Можно поправить "start shell:sendto"`)
+		f.Close()
+		if yes(mM) {
+			rename(exe, drt, drtM)
+		} else {
+			rename(exe, drtM, drt)
+		}
+	} else {
+		if yes(m) {
+			rename(exe, drtM, drt)
+		} else {
+			rename(exe, drt, drtM)
+		}
+	}
+}
+
+func rename(exe, s, t string) {
+	f, err := open(s)
+	if err == nil {
+		f.Close()
+		log.Println(s, "~>", t, os.Rename(s, t))
+	} else {
+		f, err = open(t)
+		if err != nil {
+			log.Println(exe, "~>", t, mkLink(exe, t, true, true))
+		} else {
+			f.Close()
+		}
 	}
 }

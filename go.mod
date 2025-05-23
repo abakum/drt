@@ -8,3 +8,5 @@ require (
 	github.com/tetratelabs/wazero v1.9.0
 	golang.org/x/text v0.20.0
 )
+
+require golang.org/x/sys v0.20.0
