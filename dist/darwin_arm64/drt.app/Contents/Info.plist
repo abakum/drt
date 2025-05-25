@@ -1,0 +1,19 @@
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundleName</key>
+        <string>drTags</string>
+        <key>CFBundleExecutable</key>
+        <string>drt</string>
+        <key>CFBundleIdentifier</key>
+        <string>com.github.abakum.drt</string>
+        <key>CFBundleVersion</key>
+        <string>1.0.0</string>
+        <key>CFBundleShortVersionString</key>
+        <string>1.0.0</string>
+        <key>CFBundleIconFile</key>
+        <string>icon.icns</string>
+        <key>CFBundleGetInfoString</key>
+        <string>© 2025, com.github.abakum</string>
+    </dict>
+</plist>
