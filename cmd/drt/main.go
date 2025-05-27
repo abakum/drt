@@ -4,6 +4,8 @@ package main
 //go install github.com/abakum/xgo-pack
 //xgo-pack init
 //xgo-pack build
+//goreleaser init
+//goreleaser release --snapshot --clean
 import (
 	"bufio"
 	"context"
@@ -379,6 +381,7 @@ Artist=Иван Петров
 		desktop := path.Join(xdg.UserDirs.Desktop, drt)
 		f, err := open(desktop)
 		bin := "xdg-desktop-icon"
+
 		local := path.Join(xdg.ApplicationDirs[0], drt)
 		verb := "install"
 		if err == nil {
@@ -395,9 +398,10 @@ Artist=Иван Петров
 			cmd.Stderr = os.Stderr
 			log.Println(cmd.Args, cmd.Run())
 
-			os.Remove(local)
 			os.Remove(desktop)
-			cmd = exec.CommandContext(ctx, "update-desktop-database")
+
+			os.Remove(local)
+			cmd = exec.CommandContext(ctx, "update-desktop-database", xdg.ApplicationDirs[0])
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -416,6 +420,7 @@ Name=drTags
 Type=Application
 Exec=`+exe+` %F
 Terminal=true
+Icon=x-office-spreadsheet
 NoDisplay=false
 MimeType=text/csv;audio/mpeg;audio/flac;audio/mp4;video/mp4;video/quicktime;
 Categories=AudioVideo;AudioVideoEditing;
@@ -465,9 +470,6 @@ func yes(s string) (ok bool) {
 }
 
 func swap(userDir func() (string, error), p, m string, userDirM func() (string, error), pM, mM string) {
-	if runtime.GOOS != "windows" {
-		return
-	}
 	exe, err := os.Executable()
 	if err != nil {
 		return
