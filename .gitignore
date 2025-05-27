@@ -25,4 +25,4 @@ go.work.sum
 .env
 
 # tmp
-dist/tmp/
+dist_1/

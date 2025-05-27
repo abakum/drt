@@ -9,10 +9,10 @@ import (
 )
 
 var (
-	albums,
-	titles,
+	// albums,
+	// titles,
 	results []string
-	tlTags []Tags
+	tlTags  []Tags
 )
 
 type Row struct {
@@ -128,28 +128,28 @@ func (t *Tags) timeLine(album, in, file string) {
 		log.Println("Файлы flac, mp3 моложе чем", res.Name())
 	}
 
-	if argsTags {
-		t.set("Тэги из командной строки", newTags(etc...))
-	}
 	t.parse(album, file)
+	if argsTags {
+		t.set("Из командной строки", newTags(etc...))
+	}
 
 	for i, args1 := range []string{inAlac, inFlac, inMp3} {
 		f, err := open(args1)
 		if err == nil {
-			if !argsTags {
-				// Пригодится после консольного ввода тэгов
-				albums = append(albums, album)
-				titles = append(titles, file)
-				results = append(results, args1)
-				tlTags = append(tlTags, *t)
-			}
-			if len(*t) > 0 {
-				t.write(args1)
-			}
 			if i == 0 {
 				probe(filepath.Dir(args1), filepath.Base(args1))
 			} else {
+				log.Println(args1)
 				probeA(args1, true)
+			}
+			if argsTags {
+				t.write(args1)
+			} else {
+				// Пригодится после консольного ввода тэгов
+				// albums = append(albums, album)
+				// titles = append(titles, file)
+				results = append(results, args1)
+				tlTags = append(tlTags, *t)
 			}
 			f.Close()
 		}

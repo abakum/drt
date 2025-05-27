@@ -192,9 +192,11 @@ func (t *Tags) write(args1 string) {
 			t.setVals(key, strings.Join(vals, "\n"))
 		}
 	}
-	t.setVals("ENCODER", "drTags")
+	if _, ok := t.vals("ENCODER"); ok {
+		t.setVals("ENCODER", "drTags")
+	}
 
-	t.print(3, "Пишем тэги в "+args1, false)
+	t.print(3, "Пишу тэги в "+args1, false)
 	err := taglib.WriteTags(args1, *t, taglib.DiffBeforeWrite|taglib.Clear)
 	if err != nil {
 		log.Println("Ошибка записи тэгов", err)
@@ -305,6 +307,11 @@ func open(name string) (*os.File, error) {
 }
 
 func probeA(inFile string, asr bool) {
+	switch strings.ToLower(filepath.Ext(inFile)) {
+	case ".mp3", ".flac", ".mov", "mp4", "m4a":
+	default:
+		return
+	}
 	f, err := open(inFile)
 	if err != nil {
 		return

@@ -13,6 +13,11 @@ import (
 	"github.com/tetratelabs/wazero"
 )
 
+const (
+	ffprobe = "ffprobe"
+	ffmpeg  = "ffmpeg"
+)
+
 func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err error) {
 	qArgs := []string{bin}
 	for _, arg := range args {
@@ -20,6 +25,11 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 			arg = `"` + arg + `"`
 		}
 		qArgs = append(qArgs, arg)
+	}
+	out := func() {
+		if bin != ffprobe {
+			log.Output(3, strings.Join(qArgs, " "))
+		}
 	}
 	// Может установлен ffmpeg новей и быстрей чем wasm version n5.1.6
 	if path, err := exec.LookPath(bin); err == nil {
@@ -29,9 +39,7 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 			if resolved, err := filepath.EvalSymlinks(path); err == nil && resolved != exe {
 				// log.Println(resolved, err, "resolved, err")
 				qArgs[0] = path
-				if bin != "ffprobe" {
-					log.Output(3, strings.Join(qArgs, " "))
-				}
+				out()
 
 				cmd := exec.CommandContext(ctx, path, args...)
 				cmd.Dir = root
@@ -43,7 +51,7 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 			}
 		}
 	}
-	log.Output(3, strings.Join(qArgs, " "))
+	out()
 	cacheDir := os.TempDir()
 	if ucd, err := os.UserCacheDir(); err == nil {
 		cacheDir = ucd
@@ -73,7 +81,9 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 }
 
 func probe(dir, base string) {
-	rc, err := run(ctx, "ffprobe", dir,
+	log.Println(filepath.Join(dir, base))
+
+	rc, err := run(ctx, ffprobe, dir,
 		"-hide_banner",
 		"-v", "error",
 		"-show_entries", "stream=codec_name,bit_rate,sample_fmt,coded_width,coded_height",
@@ -81,13 +91,15 @@ func probe(dir, base string) {
 		base,
 	)
 	if err != nil {
-		log.Println("ошибка", err, "код завершения", "ffprobe", rc)
+		log.Println("ошибка", err, "код завершения", ffprobe, rc)
 	}
 
 }
 
 func probeV(dir, base string) {
-	rc, err := run(ctx, "ffprobe", dir,
+	log.Println(filepath.Join(dir, base))
+
+	rc, err := run(ctx, ffprobe, dir,
 		"-hide_banner",
 		"-v", "error",
 		"-select_streams", "v:0",
@@ -96,6 +108,6 @@ func probeV(dir, base string) {
 		base,
 	)
 	if err != nil {
-		log.Println("bit_rate=?", err, "код завершения", "ffprobe", rc)
+		log.Println("bit_rate=?", err, "код завершения", ffprobe, rc)
 	}
 }

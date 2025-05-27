@@ -1,5 +1,9 @@
 package main
 
+//go install github.com/cardinalby/xgo-pack
+//go install github.com/abakum/xgo-pack
+//xgo-pack init
+//xgo-pack build
 import (
 	"bufio"
 	"context"
@@ -9,12 +13,15 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
 
+	"github.com/adrg/xdg"
 	"golang.org/x/text/encoding/unicode"
 )
 
@@ -23,6 +30,7 @@ var (
 	cncl     context.CancelFunc
 	argsTags bool
 	etc      []string
+	win      = runtime.GOOS == "windows"
 )
 
 func main() {
@@ -46,7 +54,7 @@ func main() {
 	)
 	// log.Println(name)
 	switch strings.ToLower(args0) {
-	case "ffmpeg", "ffprobe":
+	case ffmpeg, ffprobe:
 		root := ""
 		ok := false
 		inp := ""
@@ -98,14 +106,14 @@ func main() {
 	if err == nil {
 		dir := filepath.Dir(exe)
 		ext := filepath.Ext(exe)
-		for _, ff := range []string{"ffmpeg", "ffprobe"} {
+		for _, ff := range []string{ffmpeg, ffprobe} {
 			ffe := filepath.Join(dir, ff) + ext
 			f, err := open(ffe)
 			if err == nil {
 				f.Close()
 			} else {
 				m := "Можно сделать ссылку"
-				if runtime.GOOS == "windows" {
+				if win {
 					log.Printf(`%s 'mklink "%s" "%s"'`+"\n", m, ffe, exe)
 				} else {
 					log.Printf(`%s 'ln -s "%s" "%s"'`+"\r\n", m, exe, ffe)
@@ -171,8 +179,8 @@ func main() {
 				continue
 			}
 			row := newRow(vals)
-			log.Println("Результаты в", out)
-			csvTags := newTags()
+			// log.Println("Результаты в", out)
+			// csvTags := newTags()
 			//Читаем остальные строки metadata.csv
 			for {
 				var err error
@@ -205,7 +213,7 @@ func main() {
 					if len(fileTags) == 0 {
 						fileTags.add("", readTags(inFile))
 					}
-					csvTags.add("", fileTags)
+					// csvTags.add("", fileTags)
 					if audio {
 						probeA(inFile, false)
 					} else {
@@ -224,66 +232,70 @@ func main() {
 				resTags.timeLine(album, out, file)
 			}
 			f.Close()
-			csvTags.print(2, "Тэги из "+args1, false)
+			// csvTags.print(2, "Тэги из "+args1, false)
 			continue
 		}
 
 		// Это не csv
-		fileTags := newTags()
-		fileTags.add("Тэги из "+args1, readTags(args1))
 
-		if argsTags {
-			fileTags.set("Тэги из командной строки", newTags(etc...))
-		}
-		fileTags.parse(album, title)
-		if len(fileTags) > 0 {
-			fileTags.write(args1)
-		}
 		probe(filepath.Dir(args1), filepath.Base(args1))
 		probeA(args1, true)
-	}
-	if argsTags {
-		// drt file tag=
-		return
-	}
-	// drt file foo
-	// drt file
-	if len(etc) == 0 {
-		// drt file
-		r := bufio.NewReader(os.Stdin)
-		fmt.Println("Введи тэг=значение:")
-		for {
-			s, err := r.ReadString('\n')
-			s = strings.TrimSpace(s)
-			if err == nil && s != "" {
-				etc = append(etc, s)
-				continue
-			}
-			break
+
+		fileTags := readTags(args1)
+		fileTags.parse(album, title)
+		fileTags.print(2, args1, false)
+
+		if argsTags {
+			fileTags.set("Из командной строки", newTags(etc...))
+			fileTags.write(args1)
 		}
-	} else {
+
+	}
+	if argsTags || len(etc) > 0 {
+		// drt file tag=
 		// drt file foo
 		return
 	}
+	// drt file
+	for i, result := range results {
+		t := tlTags[i]
+		t.print(2, result, true)
+	}
+	r := bufio.NewReader(os.Stdin)
+	eof := "^D"
+	if win {
+		eof = "^Z"
+	}
+	fmt.Println("Пустая строка завершает ввод, а", eof, "отменяет ввод. Введи тэг=значение:")
+	for {
+		s, err := r.ReadString('\n')
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		s = strings.TrimSpace(s)
+		if s != "" {
+			etc = append(etc, s)
+			continue
+		}
+		break
+	}
 	// log.Println(etc)
-	if len(etc) > 0 {
-		for _, file := range files {
-			_, album, ext, title := oaet(file)
-			if ext == ".csv" {
-				continue
-			}
-			t := readTags(file)
-			t.set("Консольный ввод", newTags(etc...))
-			// t.print(3, "Вот что пишем", false)
-			t.parse(album, title)
-			t.write(file)
+	for _, file := range files {
+		_, album, ext, title := oaet(file)
+		if ext == ".csv" {
+			continue
 		}
-		for i, result := range results {
-			t := tlTags[i]
-			t.set("Консольный ввод", newTags(etc...))
-			t.parse(albums[i], titles[i])
-			t.write(result)
-		}
+		t := readTags(file)
+		t.parse(album, title)
+		t.set("", newTags(etc...))
+		t.write(file)
+	}
+	for i, result := range results {
+		t := tlTags[i]
+		// t.parse(albums[i], titles[i])
+		t.set("", newTags(etc...))
+		t.write(result)
 	}
 }
 
@@ -358,9 +370,83 @@ Artist=Иван Петров
 Расширенно про mp3 https://id3.org/id3v2.3.0
 Страничка drTags https://github.com/abakum/drt
 `)
-	swap(os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования",
-		os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить")
+	switch runtime.GOOS {
+	case "windows":
+		swap(os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования",
+			os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить")
+	case "linux":
+		drt := "drTags.desktop"
+		desktop := path.Join(xdg.UserDirs.Desktop, drt)
+		f, err := open(desktop)
+		bin := "xdg-desktop-icon"
+		local := path.Join(xdg.ApplicationDirs[0], drt)
+		verb := "install"
+		if err == nil {
+			f.Close()
+			verb = "uninstall"
+		}
+		if !yes(drt + " " + verb) {
+			return
+		}
+		if verb == "uninstall" {
+			cmd := exec.CommandContext(ctx, bin, verb, desktop)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			log.Println(cmd.Args, cmd.Run())
 
+			os.Remove(local)
+			os.Remove(desktop)
+			cmd = exec.CommandContext(ctx, "update-desktop-database")
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			log.Println(cmd.Args, cmd.Run())
+			return
+		}
+		exe := "drt"
+		if _, err := exec.LookPath(exe); err != nil {
+			//Если нет в путях то указываем
+			if path, err := os.Executable(); err == nil {
+				exe = path
+			}
+		}
+		os.WriteFile(desktop, []byte(`[Desktop Entry]
+Name=drTags
+Type=Application
+Exec=`+exe+` %F
+Terminal=true
+NoDisplay=false
+MimeType=text/csv;audio/mpeg;audio/flac;audio/mp4;video/mp4;video/quicktime;
+Categories=AudioVideo;AudioVideoEditing;
+Keywords=media info;metadata;tag;video;audio;codec;csv;mp3;flac;m4a;mp4;mov;davinci;resolve
+`), 0644)
+		cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+xdg.ApplicationDirs[0]) //
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Println(cmd.Args, cmd.Run())
+		if f, err = open(local); err == nil {
+			f.Close()
+			return
+		}
+		// Пробуем установить глобальные
+		for _, src := range xdg.ApplicationDirs {
+			src = path.Join(src, drt)
+			if f, err = open(src); err == nil {
+				f.Close()
+				cmd := exec.CommandContext(ctx, bin, "--novendor", verb, src)
+				cmd.Stdin = os.Stdin
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				err = cmd.Run()
+				log.Println(cmd.Args, err)
+				if err == nil {
+					break
+				}
+			}
+		}
+	}
 }
 
 func yes(s string) (ok bool) {
