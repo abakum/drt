@@ -388,7 +388,7 @@ Artist=Иван Петров
 			f.Close()
 			verb = "uninstall"
 		}
-		if !yes(drt + " " + verb) {
+		if !yes(verb + " " + drt) {
 			return
 		}
 		if verb == "uninstall" {
@@ -420,7 +420,7 @@ Name=drTags
 Type=Application
 Exec=`+exe+` %F
 Terminal=true
-Icon=x-office-spreadsheet
+Icon=edit-find-replace
 NoDisplay=false
 MimeType=text/csv;audio/mpeg;audio/flac;audio/mp4;video/mp4;video/quicktime;
 Categories=AudioVideo;AudioVideoEditing;
