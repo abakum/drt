@@ -1,9 +1,9 @@
 package main
 
+//go get github.com/cardinalby/xgo-pack@master
 //go install github.com/cardinalby/xgo-pack
-//go install github.com/abakum/xgo-pack
 //xgo-pack init
-//xgo-pack build
+// sudo /home/koka/go/bin/xgo-pack build
 //goreleaser init
 //goreleaser release --snapshot --clean
 import (
