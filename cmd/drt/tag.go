@@ -203,7 +203,53 @@ func (t *Tags) write(args1 string) {
 	}
 }
 
-// Если есть в title мажор или минор а перед ними диез или бемоль а перед ними нота, то добавит initialkey в tags.
+// Убираем точки и запятые.
+// Убираем в title хвост с частью.
+// Если в title есть часть или части то добавим MovementName=.
+// часть 1
+// часть Медлено и печально
+// части 1 2
+// части Адажио Медлено_и_печально
+func (t *Tags) tMovement(in string) (title string) {
+	title = strings.ReplaceAll(in, ".", "")
+	title = strings.ReplaceAll(title, ",", "")
+	_, ok := t.vals(taglib.MovementName)
+
+	fields := strings.Fields(title)
+	found := false
+	for i, field := range fields {
+		field = strings.ToLower(field)
+		if field != "часть" && field != "части" {
+			continue
+		}
+		if len(fields) < i+2 {
+			return
+		}
+		found = true
+		if field == "часть" {
+			if !ok {
+				t.addVals(taglib.MovementName, strings.Join(fields[i+1:], " "))
+			}
+			break
+		}
+
+		for _, field := range fields[i+1:] {
+			if !ok {
+				t.addVals(taglib.MovementName, strings.ReplaceAll(field, "_", " "))
+			}
+		}
+		break
+	}
+	if found {
+		// Рубим хвост
+		if tail := strings.Index(strings.ToLower(title), "част"); tail > 0 {
+			title = strings.TrimSpace(title[:tail])
+		}
+	}
+	return
+}
+
+// Если есть в title мажор или минор а перед ними диез или бемоль а перед ними нота, то добавит InitialKey в tags.
 // Соната соль минор ~>Gm.
 // Соната соль мажор ~>G.
 // Соната соль-бемоль мажор ~>Gb.
@@ -211,7 +257,7 @@ func (t *Tags) write(args1 string) {
 // Соната си-бемоль мажор ~>Bb.
 // Соната си минор ~>Bm.
 func (t *Tags) tKey(title string) {
-	if _, ok := (*t)[taglib.InitialKey]; ok {
+	if _, ok := t.vals(taglib.InitialKey); ok {
 		return
 	}
 	fields := strings.Fields(strings.ToLower(title))
@@ -288,7 +334,81 @@ loop:
 	default:
 		return
 	}
-	t.setVals("initialkey", note+half+minor)
+	t.setVals(taglib.InitialKey, note+half+minor)
+}
+
+// Ищем в title инструмент и добавляем его в Grouping=
+// Ищем в title № и всё, что до него добавляем в Grouping=
+func (t *Tags) tGroup(title string) {
+	// для скрипки и фортепиано РПЕЧ
+	// для двух скрипок и фортепиано РПМЧ
+	instruments := map[string]string{
+		// Клавишные: фортепиано, орган, синтезатор
+		"органа":       "Орган",
+		"синтезатора":  "Синтезатор",
+		"синтезаторов": "Синтезатор",
+		"фортепиано":   "Фортепиано",
+		// Струнные смычковые: Скрипка, альт, виолончель, контрабас
+		"альта":       "Альт",
+		"альтов":      "Альт",
+		"виолончели":  "Виолончель",
+		"виолончелей": "Виолончель",
+		"контрабаса":  "Контрабас",
+		"контрабасов": "Контрабас",
+		"cкрипки":     "Скрипка",
+		"cкрипок":     "Скрипка",
+		// Струнные щипковые:  арфа, балалайка, домра, гитара, лютня, мандолина
+		"арфы":      "Арфа",
+		"арф":       "Арфа",
+		"балалайки": "Балалайка",
+		"балалаек":  "Балалайка",
+		"гитары":    "Гитара",
+		"гитар":     "Гитара",
+		"домры":     "Домра",
+		"домр":      "Домра",
+		"лютни":     "Лютня",
+		"лютней":    "Лютня",
+		"лютен":     "Лютня",
+		"мандолины": "Мандолина",
+		"мандолин":  "Мандолина",
+		// Деревянные духовые: Флейта
+		// Язычковые духовые: кларнет, саксофон
+		// Духовые с двойным язычком: гобой, фагот
+		"гобоя":      "Гобой",
+		"гобоев":     "Гобой",
+		"кларнета":   "Кларнет",
+		"кларнетов":  "Кларнет",
+		"саксофона":  "Саксофон",
+		"саксофонов": "Саксофон",
+		"фагота":     "фагот",
+		"фаготов":    "фагот",
+		"флейты":     "Флейта",
+		"флейт":      "Флейта",
+		// Медные духовые: Труба, тромбон, валторна
+		"валторны":  "Валторна",
+		"валторн":   "Валторна",
+		"тромбона":  "Тромбон",
+		"тромбонов": "Тромбон",
+		"трубы":     "Труба",
+		"труб":      "Труба",
+		// Язычковые Гармонь Аккордеон Баян
+		"аккордеона":  "Аккордеон",
+		"аккордеонов": "Аккордеон",
+		"баяна":       "Баян",
+		"баянов":      "Баян",
+		"гармони":     "Гармонь",
+		"гармоней":    "Гармонь",
+	}
+	fields := strings.Fields(strings.ToLower(title))
+	for _, field := range fields {
+		if v, ok := instruments[field]; ok {
+			t.addVals(taglib.Grouping, v)
+		}
+	}
+	ss := strings.Split(title, "№")
+	if ss[0] != title {
+		t.addVals(taglib.Grouping, strings.TrimSpace(ss[0]))
+	}
 }
 
 func open(name string) (*os.File, error) {
@@ -334,11 +454,13 @@ func probeA(inFile string, asr bool) {
 	}
 }
 
+// Если ключа key нет устанавливаем его в val.
+// Если ключ key есть то присваиваем его val.
 func (t *Tags) kvv(key string, val *string) {
-	if ss, ok := t.vals(key); ok {
+	if vals, ok := t.vals(key); ok {
 		*val = ""
-		if len(ss) > 0 {
-			*val = strings.Join(ss, "/")
+		if len(vals) > 0 {
+			*val = strings.Join(vals, "/")
 		}
 	} else {
 		t.setVals(key, *val)
@@ -350,6 +472,11 @@ func (t Tags) vals(key string) (ss []string, ok bool) {
 	key = strings.TrimSpace(key)
 	ss, ok = t[key]
 	return
+}
+func (t *Tags) addVals(key string, vals ...string) {
+	tags := newTags()
+	tags.setVals(key, vals...)
+	t.add("", tags)
 }
 
 func (t *Tags) setVals(key string, vals ...string) {
@@ -373,7 +500,8 @@ func (t *Tags) setVals(key string, vals ...string) {
 	t.fixVal()
 }
 
-// album/album tracknumber composer title
+// album/album tracknumber composer title часть 1
+// album/album tracknumber Имя_Фамилия title части 1 Медленно_и_печально
 func (t *Tags) parse(album, file string) {
 	t.kvv(taglib.Album, &album)
 	if _, ok := t.vals(taglib.Date); !ok {
@@ -385,6 +513,10 @@ func (t *Tags) parse(album, file string) {
 				t.setVals(taglib.Date, date[:4])
 			}
 		}
+	}
+	titleSort, _ := t.vals(taglib.TitleSort)
+	if len(titleSort) > 0 {
+		file = titleSort[0]
 	}
 	title := strings.TrimPrefix(file, album)
 	title = strings.TrimSpace(title)
@@ -404,13 +536,15 @@ func (t *Tags) parse(album, file string) {
 			title = strings.TrimSpace(title)
 			//Соната для фортепиано 9 pе мажор
 			if _, ok := t.vals(taglib.Composer); !ok {
-				t.setVals(taglib.Composer, composer)
+				t.setVals(taglib.Composer, strings.ReplaceAll(composer, "_", " "))
 			}
 		}
 	}
 
-	t.kvv(taglib.Title, &title)
 	t.tKey(title)
+	t.tGroup(title)
+	title = t.tMovement(title)
+	t.kvv(taglib.Title, &title)
 }
 
 func (t *Tags) csv(file string, row *Row, keys ...string) {

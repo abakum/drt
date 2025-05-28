@@ -85,47 +85,37 @@ func (t *Tags) timeLine(album, in, file string) {
 	}
 	defer res.Close()
 	// slices.SortFunc(yourSlice, func(a, b T) int { return a.Date.Compare(b.Date) })
+	flacMp3 := "flac, mp3"
 	if isFirstAfterSecond(res.Name(), inMp3) ||
 		isFirstAfterSecond(res.Name(), inFlac) ||
 		isFirstAfterSecond(res.Name(), inAlac) {
-		// .mov
-		// .mp4
-		// .alac.mov
-		if strings.HasSuffix(res.Name(), alac) {
-			// .alac.mov
-			log.Println("Результат в", alac, ". Создаём mp3, flac")
-			rs, err := run(ctx, "ffmpeg", in,
-				"-hide_banner",
-				"-v", "error",
-				"-i", alac,
-				"-vn", "-compression_level", "12", "-y", flac,
-				"-vn", "-q", "0", "-joint_stereo", "0", "-y", mp3,
-			)
-			if err != nil || rs != 0 {
-				log.Println("Не удалось создать файлы flac, mp3", err, "код завершения", rs)
-			}
-		} else {
-			// .mov
-			// .mp4
-			base := filepath.Base(res.Name())
-			log.Println("Результат в", base, "Создаём alac.mov, mp3, flac")
-			rs, err := run(ctx, "ffmpeg", in,
-				"-hide_banner",
-				"-v", "error",
-				"-i", base,
+		base := filepath.Base(res.Name())
+		lpcm := !strings.HasSuffix(res.Name(), alac) && !strings.HasSuffix(res.Name(), mp4)
+		opts := []string{
+			"-hide_banner",
+			"-v", "error",
+			"-i", base,
+			"-vn", "-compression_level", "12", "-y", flac,
+			"-vn", "-q", "0", "-joint_stereo", "0", "-y", mp3,
+		}
+		if lpcm {
+			flacMp3 = flacMp3 + ", alac.mov"
+			opts = append(opts,
 				"-c:v", "copy", "-c:a", "alac", "-y", alac,
-				"-vn", "-compression_level", "12", "-y", flac,
-				"-vn", "-q", "0", "-joint_stereo", "0", "-y", mp3,
 			)
-			if err == nil && rs == 0 {
+		}
+		log.Println("Результат в", filepath.Ext(base), "Создаём", flacMp3)
+		rs, err := run(ctx, "ffmpeg", in, opts...)
+		if err == nil && rs == 0 {
+			if lpcm {
 				res.Close()
 				log.Println("Удаляем", res.Name(), os.Remove(res.Name()))
-			} else {
-				log.Println("Не удалось создать файлы alac.mov, flac, mp3", err, "код завершения", rs)
 			}
+		} else {
+			log.Println("Не удалось создать файлы", flacMp3, err, "код завершения", rs)
 		}
 	} else {
-		log.Println("Файлы flac, mp3 моложе чем", res.Name())
+		log.Println("Файлы", flacMp3, "моложе чем", res.Name())
 	}
 
 	t.parse(album, file)
@@ -133,7 +123,7 @@ func (t *Tags) timeLine(album, in, file string) {
 		t.set("Из командной строки", newTags(etc...))
 	}
 
-	for i, args1 := range []string{inAlac, inFlac, inMp3} {
+	for i, args1 := range []string{inMp4, inAlac, inFlac, inMp3} {
 		f, err := open(args1)
 		if err == nil {
 			if i == 0 {

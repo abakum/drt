@@ -13,3 +13,5 @@ require (
 	github.com/adrg/xdg v0.5.3
 	golang.org/x/sys v0.26.0
 )
+
+require github.com/xlab/closer v1.1.0 // indirect
