@@ -7,6 +7,11 @@ package main
 //sudo /home/koka/go/bin/xgo-pack build
 //goreleaser init
 //goreleaser release --snapshot --clean
+//cd /home/koka/src/drt/dist/linux_amd64
+//sudo dpkg -r drt
+//sudo dpkg -i drt.deb
+//sudo desktop-file-install --set-key=Exec --set-value="drt %F" /usr/share/applications/drt.desktop
+
 import (
 	"bufio"
 	"context"
