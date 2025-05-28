@@ -3,7 +3,8 @@ package main
 //go get github.com/cardinalby/xgo-pack@master
 //go install github.com/cardinalby/xgo-pack
 //xgo-pack init
-// sudo /home/koka/go/bin/xgo-pack build
+//sudo apt install genisoimage
+//sudo /home/koka/go/bin/xgo-pack build
 //goreleaser init
 //goreleaser release --snapshot --clean
 import (
