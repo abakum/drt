@@ -3,8 +3,10 @@ package main
 //go get github.com/cardinalby/xgo-pack@master
 //go install github.com/cardinalby/xgo-pack
 //xgo-pack init
-//sudo apt install genisoimage
-//sudo /home/koka/go/bin/xgo-pack build
+//#sudo apt install genisoimage
+//sudo rm -r dist/tmp
+//#sudo /home/koka/go/bin/xgo-pack build
+//xgo-pack build
 //goreleaser init
 //goreleaser release --snapshot --clean
 //cd /home/koka/src/drt/dist/linux_amd64
@@ -22,7 +24,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -33,34 +34,62 @@ import (
 	"golang.org/x/text/encoding/unicode"
 )
 
+const (
+	drt    = "drt"    // для консоли
+	drTags = "drTags" // для GUI
+)
+
 var (
 	ctx      context.Context
 	cncl     context.CancelFunc
 	argsTags bool
 	etc      []string
 	win      = runtime.GOOS == "windows"
+	// deskTop  = os.Getenv("XDG_CURRENT_DESKTOP")
+	// a/b.c
+	args0 = filepath.Base(os.Args[0])
+	exe,
+	dir,
+	ext string
 )
 
+func ctrlC() {
+	if args0 != drTags {
+		return
+	}
+	log.Println("Жми ^C")
+	closer.Hold()
+}
+
 func main() {
-	log.SetFlags(log.Lshortfile)
-
-	// ctx, cncl := context.WithCancel(context.Background())
-	// defer closer.Close()
-	// closer.Bind(cncl)
-
-	ctx, cncl = signal.NotifyContext(context.Background(), closer.DefaultSignalSet...)
-	defer cncl()
-
-	// a/b.c
-	args0 := filepath.Base(os.Args[0])
 	// b.c
 	args0 = strings.TrimSuffix(args0, filepath.Ext(args0))
 	// b
 	var (
 		rc   uint32
-		err  error
 		file string
+		err  error
 	)
+
+	log.SetFlags(log.Lshortfile)
+	exe, err = os.Executable()
+	if err != nil {
+		if lp, err := exec.LookPath(args0); err == nil {
+			exe = lp
+		} else if abs, err := filepath.Abs(args0); err == nil {
+			exe = abs
+		} else {
+			log.Fatalf("Где я? %v", err)
+		}
+	}
+
+	ctx, cncl = context.WithCancel(context.Background())
+	defer closer.Close()
+	closer.Bind(cncl)
+
+	// ctx, cncl = signal.NotifyContext(context.Background(), closer.DefaultSignalSet...)
+	// defer cncl()
+
 	// log.Println(name)
 	switch strings.ToLower(args0) {
 	case ffmpeg, ffprobe:
@@ -111,29 +140,20 @@ func main() {
 		os.Exit(int(rc))
 	}
 
-	exe, err := os.Executable()
-	if err == nil {
-		dir := filepath.Dir(exe)
-		ext := filepath.Ext(exe)
-		for _, ff := range []string{ffmpeg, ffprobe} {
-			ffe := filepath.Join(dir, ff) + ext
-			f, err := open(ffe)
-			if err == nil {
-				f.Close()
+	dir = filepath.Dir(exe)
+	ext = filepath.Ext(exe)
+	for _, ff := range []string{ffmpeg, ffprobe} {
+		ff = ff + ext
+		if _, err := exec.LookPath(ff); err != nil {
+			// Если не установлены ffmpeg или ffprobe
+			ffe := filepath.Join(dir, ff)
+			m := "Можно сделать ссылку"
+			if win {
+				log.Printf(`%s 'mklink -h "%s" "%s"'`+"\n", m, ffe, exe)
 			} else {
-				m := "Можно сделать ссылку"
-				if win {
-					log.Printf(`%s 'mklink "%s" "%s"'`+"\n", m, ffe, exe)
-				} else {
-					log.Printf(`%s 'ln -s "%s" "%s"'`+"\r\n", m, exe, ffe)
-				}
+				log.Printf(`%s 'ln "%s" "%s"'`+"\r\n", m, exe, ffe)
 			}
 		}
-	}
-
-	if len(os.Args) < 2 {
-		help()
-		return
 	}
 
 	// drt file... fileX param... paramY
@@ -141,7 +161,29 @@ func main() {
 	// [file... fileX]
 	etc = []string{}
 	// [param... paramY]
-	for _, args1 := range os.Args[1:] {
+
+	nautilus := os.Getenv("NAUTILUS_SCRIPT_SELECTED_FILE_PATHS")
+	nautilus = strings.TrimSpace(nautilus)
+
+	var args []string
+	dash := false
+	switch {
+	case nautilus != "":
+		args = strings.Split(nautilus, "\n")
+	case len(os.Args) > 1:
+		if os.Args[1] == "-" {
+			dash = true
+			bs, _ := os.ReadFile(os.Stdin.Name())
+			args = strings.Split(strings.TrimSpace(string(bs)), "\n")
+		} else {
+			args = os.Args[1:]
+		}
+	default:
+		help()
+		return
+	}
+
+	for _, args1 := range args {
 		args1, err := filepath.Abs(args1)
 		if err != nil {
 			break
@@ -158,8 +200,8 @@ func main() {
 		return
 	}
 
-	if len(os.Args) > 1+len(files) {
-		etc = os.Args[1+len(files):]
+	if len(args) > len(files) {
+		etc = args[len(files):]
 	}
 	argsTags = strings.Contains(strings.Join(etc, " "), "=")
 
@@ -255,14 +297,15 @@ func main() {
 		fileTags.print(2, args1, false)
 
 		if argsTags {
-			fileTags.set("Из командной строки", newTags(etc...))
+			fileTags.set("Меняю", newTags(etc...))
 			fileTags.write(args1)
 		}
 
 	}
-	if argsTags || len(etc) > 0 {
+	if argsTags || len(etc) > 0 || dash {
 		// drt file tag=
 		// drt file foo
+		// drt -
 		return
 	}
 	// drt file
@@ -272,6 +315,7 @@ func main() {
 	}
 	r := bufio.NewReader(os.Stdin)
 	fmt.Println("Пустая строка завершает ввод записью, ^С отменяет ввод. Введи тэг=значение:")
+	etc = nil
 	for {
 		s, err := r.ReadString('\n')
 		if err != nil {
@@ -302,6 +346,7 @@ func main() {
 		t.set("", newTags(etc...))
 		t.write(result)
 	}
+	ctrlC()
 }
 
 func oaet(args1 string) (out, album, ext, title string) {
@@ -388,30 +433,35 @@ Artist=Иван Петров
 		swap(os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования",
 			os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить")
 	case "linux":
-		drt := "drTags.desktop"
-		desktop := path.Join(xdg.UserDirs.Desktop, drt)
+		dr := drTags + ".desktop"
+		sh := filepath.Join(xdg.DataHome, "/nautilus/scripts/", drTags)
+		hard := filepath.Join(dir, drTags)
+		desktop := path.Join(xdg.UserDirs.Desktop, dr)
 		f, err := open(desktop)
 		bin := "xdg-desktop-icon"
 
-		local := path.Join(xdg.ApplicationDirs[0], drt)
+		local := path.Join(xdg.DataHome, "application", dr)
 		verb := "install"
 		if err == nil {
 			f.Close()
 			verb = "uninstall"
 		}
-		if !yes(verb + " " + drt) {
+		if !yes(verb + " " + drTags) {
 			return
 		}
 		if verb == "uninstall" {
+			log.Println("Удаление", sh, os.Remove(sh))
+			log.Println("Удаление", hard, os.Remove(hard))
+
 			cmd := exec.CommandContext(ctx, bin, verb, desktop)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			log.Println(cmd.Args, cmd.Run())
 
-			os.Remove(desktop)
+			log.Println("Удаление", desktop, os.Remove(desktop))
 
-			os.Remove(local)
+			log.Println("Удаление", local, os.Remove(local))
 			cmd = exec.CommandContext(ctx, "update-desktop-database", xdg.ApplicationDirs[0])
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
@@ -419,24 +469,32 @@ Artist=Иван Петров
 			log.Println(cmd.Args, cmd.Run())
 			return
 		}
-		exe := "drt"
-		if _, err := exec.LookPath(exe); err != nil {
+		ex := drTags
+		if _, err := exec.LookPath(ex); err != nil {
 			//Если нет в путях то указываем
-			if path, err := os.Executable(); err == nil {
-				exe = path
+			ex = filepath.Join(dir, ex)
+			f, err := open(ex)
+			if err == nil {
+				f.Close()
+			} else {
+				mkLink(filepath.Join(dir, drt), hard, true, true)
 			}
 		}
-		os.WriteFile(desktop, []byte(`[Desktop Entry]
+		log.Println("Создаю", sh,
+			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/bin/bash
+gnome-terminal --maximize --title %s -- %s`, drTags, drTags)), 0744))
+		log.Println("Создаю", desktop,
+			os.WriteFile(desktop, []byte(`[Desktop Entry]
 Name=drTags
 Type=Application
-Exec=`+exe+` %F
+Exec=`+ex+` %F
 Terminal=true
 Icon=edit-find-replace
 NoDisplay=false
 MimeType=text/csv;audio/mpeg;audio/flac;audio/mp4;video/mp4;video/quicktime;
 Categories=AudioVideo;AudioVideoEditing;
 Keywords=media info;metadata;tag;video;audio;codec;csv;mp3;flac;m4a;mp4;mov;davinci;resolve
-`), 0644)
+`), 0644))
 		cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+xdg.ApplicationDirs[0]) //
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
@@ -448,10 +506,10 @@ Keywords=media info;metadata;tag;video;audio;codec;csv;mp3;flac;m4a;mp4;mov;davi
 		}
 		// Пробуем установить глобальные
 		for _, src := range xdg.ApplicationDirs {
-			src = path.Join(src, drt)
+			src = path.Join(src, dr)
 			if f, err = open(src); err == nil {
 				f.Close()
-				cmd := exec.CommandContext(ctx, bin, "--novendor", verb, src)
+				cmd := exec.CommandContext(ctx, bin, verb, "--novendor", src)
 				cmd.Stdin = os.Stdin
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr

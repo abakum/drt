@@ -41,6 +41,8 @@ github.com/cardinalby/xgo-pack v0.9.8-0.20250528162732-81198f487058 h1:VgmBcGk/k
 github.com/cardinalby/xgo-pack v0.9.8-0.20250528162732-81198f487058/go.mod h1:Bqpw7dM1S4iLegPsDjgmMGuptqK2fFaMbt5vZmlvUoE=
 github.com/cardinalby/xgo-pack v0.9.8-0.20250528200100-093d02d4dfa3 h1:mSGWHpwYlwkUnI0lR6Y6z1i4CGuYo1ESslL9r8hVwxI=
 github.com/cardinalby/xgo-pack v0.9.8-0.20250528200100-093d02d4dfa3/go.mod h1:Bqpw7dM1S4iLegPsDjgmMGuptqK2fFaMbt5vZmlvUoE=
+github.com/cardinalby/xgo-pack v0.9.8 h1:HHQ1XVOeUwxP1e3OW7dpSHPBjtnohn603prq6VqKGfg=
+github.com/cardinalby/xgo-pack v0.9.8/go.mod h1:Bqpw7dM1S4iLegPsDjgmMGuptqK2fFaMbt5vZmlvUoE=
 github.com/cloudflare/circl v1.3.3/go.mod h1:5XYMA4rFBvNIrhs50XuiBJ15vF2pZn4nnUKZrLbUZFA=
 github.com/cloudflare/circl v1.3.7 h1:qlCDlTPz2n9fu58M0Nh1J/JzcFpfgkFHHX3O35r5vcU=
 github.com/cloudflare/circl v1.3.7/go.mod h1:sRTcRWXGLrKw6yIGJ+l7amYJFfAXbZG0kBSc8r4zxgA=

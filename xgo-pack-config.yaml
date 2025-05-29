@@ -58,5 +58,5 @@ targets:
       build_deb: false # Build and keep deb package
     amd64:
       out_dir: linux_amd64
-      build_bin: true # Build and keep binary
-      build_deb: true # Build and keep deb package
+      build_bin: false # Build and keep binary
+      build_deb: false # Build and keep deb package

@@ -29,7 +29,7 @@ require (
 	github.com/cardinalby/go-dto-merge v1.0.1 // indirect
 	github.com/cardinalby/go-struct-flags v1.1.0 // indirect
 	github.com/cardinalby/xgo-as-library v1.1.5 // indirect
-	github.com/cardinalby/xgo-pack v0.9.8-0.20250528200100-093d02d4dfa3 // indirect
+	github.com/cardinalby/xgo-pack v0.9.8 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.4 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect

@@ -26,20 +26,23 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 		}
 		qArgs = append(qArgs, arg)
 	}
-	out := func() {
+	out := func(wasm bool) {
 		if bin != ffprobe {
+			if wasm {
+				log.Output(3, "Использую встроенный ffmpeg version n5.1.6")
+			} else {
+				log.Output(3, "Надеюсь установлен ffmpeg новей и быстрей чем встроенный wasm version n5.1.6")
+			}
 			log.Output(3, strings.Join(qArgs, " "))
 		}
 	}
-	// Может установлен ffmpeg новей и быстрей чем wasm version n5.1.6
 	if path, err := exec.LookPath(bin); err == nil {
 		// log.Println(path, err, "path, err")
 		if exe, err := os.Executable(); err == nil {
 			// log.Println(exe, err, "exe, err")
 			if resolved, err := filepath.EvalSymlinks(path); err == nil && resolved != exe {
-				// log.Println(resolved, err, "resolved, err")
 				qArgs[0] = path
-				out()
+				out(false)
 
 				cmd := exec.CommandContext(ctx, path, args...)
 				cmd.Dir = root
@@ -51,7 +54,7 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 			}
 		}
 	}
-	out()
+	out(true)
 	cacheDir := os.TempDir()
 	if ucd, err := os.UserCacheDir(); err == nil {
 		cacheDir = ucd
