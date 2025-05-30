@@ -27,12 +27,12 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 		qArgs = append(qArgs, arg)
 	}
 	out := func(wasm bool) {
+		if wasm {
+			log.Output(3, "Использую встроенный "+bin+" v5.1.6 wasm")
+			// } else {
+			// 	log.Output(3, "Надеюсь установлен "+bin+" новей и быстрей чем встроенный v5.1.6 wasm")
+		}
 		if bin != ffprobe {
-			if wasm {
-				log.Output(3, "Использую встроенный ffmpeg version n5.1.6")
-			} else {
-				log.Output(3, "Надеюсь установлен ffmpeg новей и быстрей чем встроенный wasm version n5.1.6")
-			}
 			log.Output(3, strings.Join(qArgs, " "))
 		}
 	}

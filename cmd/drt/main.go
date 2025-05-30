@@ -37,6 +37,7 @@ import (
 const (
 	drt    = "drt"    // для консоли
 	drTags = "drTags" // для GUI
+	del    = "Удаляю"
 )
 
 var (
@@ -45,24 +46,17 @@ var (
 	argsTags bool
 	etc      []string
 	win      = runtime.GOOS == "windows"
-	// deskTop  = os.Getenv("XDG_CURRENT_DESKTOP")
 	// a/b.c
 	args0 = filepath.Base(os.Args[0])
+	// b.c
 	exe,
 	dir,
+	// a
 	ext string
+	// .c
 )
 
-func ctrlC() {
-	if args0 != drTags {
-		return
-	}
-	log.Println("Жми ^C")
-	closer.Hold()
-}
-
 func main() {
-	// b.c
 	args0 = strings.TrimSuffix(args0, filepath.Ext(args0))
 	// b
 	var (
@@ -430,17 +424,18 @@ Artist=Иван Петров
 `)
 	switch runtime.GOOS {
 	case "windows":
-		swap(os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования",
-			os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить")
+		swap(ST{os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования", "", ""},
+			ST{os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить", "", ""})
 	case "linux":
 		dr := drTags + ".desktop"
-		sh := filepath.Join(xdg.DataHome, "/nautilus/scripts/", drTags)
+		sh := filepath.Join(xdg.DataHome, "nautilus/scripts", drTags)
 		hard := filepath.Join(dir, drTags)
 		desktop := path.Join(xdg.UserDirs.Desktop, dr)
 		f, err := open(desktop)
-		bin := "xdg-desktop-icon"
+		xdgDesktopIcon := "xdg-desktop-icon"
 
-		local := path.Join(xdg.DataHome, "application", dr)
+		application := path.Join(xdg.DataHome, "application")
+		local := path.Join(application, dr)
 		verb := "install"
 		if err == nil {
 			f.Close()
@@ -449,42 +444,67 @@ Artist=Иван Петров
 		if !yes(verb + " " + drTags) {
 			return
 		}
+		defer ctrlC()
 		if verb == "uninstall" {
-			log.Println("Удаление", sh, os.Remove(sh))
-			log.Println("Удаление", hard, os.Remove(hard))
+			cmd := exec.CommandContext(ctx, xdgDesktopIcon, verb, desktop)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+			log.Println(cmd.Args, err)
+			if err != nil {
+				log.Println(del, desktop, os.Remove(desktop))
+			}
 
-			cmd := exec.CommandContext(ctx, bin, verb, desktop)
+			log.Println(del, local, os.Remove(local))
+			cmd = exec.CommandContext(ctx, "update-desktop-database", application)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			log.Println(cmd.Args, cmd.Run())
 
-			log.Println("Удаление", desktop, os.Remove(desktop))
-
-			log.Println("Удаление", local, os.Remove(local))
-			cmd = exec.CommandContext(ctx, "update-desktop-database", xdg.ApplicationDirs[0])
-			cmd.Stdin = os.Stdin
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			log.Println(cmd.Args, cmd.Run())
+			log.Println(del, sh, os.Remove(sh))
+			log.Println(del, hard, os.Remove(hard))
 			return
 		}
+		// install
+		if f, err = open(hard); err == nil {
+			f.Close()
+		} else {
+			mkLink(filepath.Join(dir, drt), hard, true, true)
+		}
+
 		ex := drTags
 		if _, err := exec.LookPath(ex); err != nil {
-			//Если нет в путях то указываем
-			ex = filepath.Join(dir, ex)
-			f, err := open(ex)
-			if err == nil {
-				f.Close()
-			} else {
-				mkLink(filepath.Join(dir, drt), hard, true, true)
-			}
+			//Если не в путёвом
+			ex = hard
 		}
-		log.Println("Создаю", sh,
+
+		log.Println("Создаю меню для nautilus", sh,
 			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/bin/bash
-gnome-terminal --maximize --title %s -- %s`, drTags, drTags)), 0744))
-		log.Println("Создаю", desktop,
-			os.WriteFile(desktop, []byte(`[Desktop Entry]
+gnome-terminal --title %s -- %s`, drTags, drTags)), 0744))
+		deskTop(desktop, ex)
+		cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+application) //
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Println(cmd.Args, cmd.Run())
+		if f, err = open(local); err == nil {
+			f.Close()
+		} else {
+			deskTop(local, ex)
+		}
+		cmd = exec.CommandContext(ctx, xdgDesktopIcon, verb, "--novendor", local)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Println(cmd.Args, cmd.Run())
+	}
+}
+
+func deskTop(desktop, ex string) {
+	log.Println("Создаю ярлык", desktop,
+		os.WriteFile(desktop, []byte(`[Desktop Entry]
 Name=drTags
 Type=Application
 Exec=`+ex+` %F
@@ -495,32 +515,6 @@ MimeType=text/csv;audio/mpeg;audio/flac;audio/mp4;video/mp4;video/quicktime;
 Categories=AudioVideo;AudioVideoEditing;
 Keywords=media info;metadata;tag;video;audio;codec;csv;mp3;flac;m4a;mp4;mov;davinci;resolve
 `), 0644))
-		cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+xdg.ApplicationDirs[0]) //
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		log.Println(cmd.Args, cmd.Run())
-		if f, err = open(local); err == nil {
-			f.Close()
-			return
-		}
-		// Пробуем установить глобальные
-		for _, src := range xdg.ApplicationDirs {
-			src = path.Join(src, dr)
-			if f, err = open(src); err == nil {
-				f.Close()
-				cmd := exec.CommandContext(ctx, bin, verb, "--novendor", src)
-				cmd.Stdin = os.Stdin
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err = cmd.Run()
-				log.Println(cmd.Args, err)
-				if err == nil {
-					break
-				}
-			}
-		}
-	}
 }
 
 func yes(s string) (ok bool) {
@@ -538,36 +532,36 @@ func yes(s string) (ok bool) {
 	return
 }
 
-func swap(userDir func() (string, error), p, m string, userDirM func() (string, error), pM, mM string) {
-	exe, err := os.Executable()
-	if err != nil {
-		return
+type ST struct {
+	userDir  func() (string, error)
+	p, m     string
+	root, dr string
+}
+
+func swap(sts ...ST) {
+	stm := make(map[bool]ST, 2)
+	var err error
+	for i, st := range sts {
+		st.root, err = st.userDir()
+		if err != nil {
+			return
+		}
+		st.dr = filepath.Join(st.root, st.p, drTags+ext)
+		stm[i > 0] = st
 	}
-	root, err := userDir()
-	if err != nil {
-		return
-	}
-	rootM, err := userDirM()
-	if err != nil {
-		return
-	}
-	drt := filepath.Join(root, p, filepath.Base(exe))
-	drtM := filepath.Join(rootM, pM, filepath.Base(exe))
 	f, err := open(drt)
+	i := true
 	if err == nil {
 		f.Close()
-		if yes(mM) {
-			rename(exe, drt, drtM)
-		} else {
-			rename(exe, drtM, drt)
-		}
 	} else {
-		if yes(m) {
-			rename(exe, drtM, drt)
-		} else {
-			rename(exe, drt, drtM)
-		}
+		i = !i
 	}
+	if yes(stm[i].m) {
+		defer ctrlC()
+	} else {
+		i = !i
+	}
+	rename(exe, stm[!i].dr, stm[i].dr)
 }
 
 func rename(exe, s, t string) {
@@ -583,4 +577,12 @@ func rename(exe, s, t string) {
 			f.Close()
 		}
 	}
+}
+
+func ctrlC() {
+	if args0 != drTags {
+		return
+	}
+	log.Println("Жми ^C")
+	closer.Hold()
 }
