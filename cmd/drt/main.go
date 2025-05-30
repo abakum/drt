@@ -549,8 +549,8 @@ func swap(sts ...ST) {
 		st.dr = filepath.Join(st.root, st.p, drTags+ext)
 		stm[i > 0] = st
 	}
-	f, err := open(drt)
-	i := true
+	i := false
+	f, err := open(stm[!i].dr)
 	if err == nil {
 		f.Close()
 	} else {
