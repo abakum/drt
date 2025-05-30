@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -24,7 +25,13 @@ func (t Tags) print(calldepth int, title string, slash bool) {
 		// log.Println(title)
 		log.Output(calldepth, title)
 	}
-	for k, vals := range t {
+	keys := []string{}
+	for k := range t {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		vals := t[k]
 		if slash {
 			fmt.Println(k + "=" + strings.Join(vals, "/"))
 		} else {
@@ -34,7 +41,6 @@ func (t Tags) print(calldepth int, title string, slash bool) {
 		}
 	}
 	if len(t) > 0 {
-		fmt.Println()
 		fmt.Println()
 	}
 }
@@ -70,6 +76,11 @@ func (t *Tags) add(title string, tags Tags) {
 // Выведем tags с title.
 // Установим из tags в t
 func (t *Tags) set(title string, tags Tags) {
+	if _, ok := tags["="]; ok {
+		// С чистого листа
+		*t = newTags()
+		delete(tags, "=")
+	}
 	tags.fixKey()
 	tags.fixVal()
 	tags.print(3, title, true)
@@ -166,6 +177,11 @@ func newTags(ss ...string) (tags Tags) {
 				key = old
 				kva = []string{key, kva[0]}
 			} else {
+				if key == "" && strings.TrimSpace(kva[1]) == "" {
+					// С чистого листа
+					tags = Tags{"=": nil}
+					continue
+				}
 				old = key
 			}
 			for _, val := range kva[1:] {
@@ -196,7 +212,7 @@ func (t *Tags) write(args1 string) {
 		t.setVals("ENCODER", "drTags")
 	}
 
-	t.print(3, "Пишу тэги в "+args1, false)
+	// t.print(3, "Пишу тэги в "+args1, false)
 	err := taglib.WriteTags(args1, *t, taglib.DiffBeforeWrite|taglib.Clear)
 	if err != nil {
 		log.Println("Ошибка записи тэгов", err)

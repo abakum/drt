@@ -293,6 +293,7 @@ func main() {
 		if argsTags {
 			fileTags.set("Меняю", newTags(etc...))
 			fileTags.write(args1)
+			readTags(args1).print(2, args1, false)
 		}
 
 	}
@@ -303,44 +304,43 @@ func main() {
 		return
 	}
 	// drt file
-	for i, result := range results {
-		t := tlTags[i]
-		t.print(2, result, true)
+	for _, result := range results {
+		result.tags.print(2, result.file, true)
 	}
-	r := bufio.NewReader(os.Stdin)
-	fmt.Println("Пустая строка завершает ввод записью, ^С отменяет ввод. Введи тэг=значение:")
-	etc = nil
-	for {
-		s, err := r.ReadString('\n')
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		s = strings.TrimSpace(s)
-		if s != "" {
-			etc = append(etc, s)
-			continue
-		}
-		break
-	}
-	// log.Println(etc)
 	for _, file := range files {
 		_, album, ext, title := oaet(file)
 		if ext == ".csv" {
 			continue
 		}
-		t := readTags(file)
-		t.parse(album, title)
-		t.set("", newTags(etc...))
-		t.write(file)
+		results = append(results, FATT{file, album, title, readTags(file)})
 	}
-	for i, result := range results {
-		t := tlTags[i]
-		// t.parse(albums[i], titles[i])
-		t.set("", newTags(etc...))
-		t.write(result)
+	r := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Println("Пустая строка завершает ввод записью, ^С отменяет ввод. Введи тэг=значение:")
+		etc = nil
+		for {
+			s, err := r.ReadString('\n')
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			s = strings.TrimSpace(s)
+			if s != "" {
+				etc = append(etc, s)
+				continue
+			}
+			break
+		}
+		// log.Println(etc)
+		for _, result := range results {
+			result.tags.set("", newTags(etc...))
+			result.tags.write(result.file)
+
+			result.tags = readTags(result.file)
+			result.tags.parse(result.album, result.title)
+			result.tags.print(2, result.file, false)
+		}
 	}
-	ctrlC()
 }
 
 func oaet(args1 string) (out, album, ext, title string) {

@@ -8,11 +8,15 @@ import (
 	"strings"
 )
 
+type FATT struct {
+	file  string
+	album string
+	title string
+	tags  Tags
+}
+
 var (
-	// albums,
-	// titles,
-	results []string
-	tlTags  []Tags
+	results = []FATT{}
 )
 
 type Row struct {
@@ -134,12 +138,10 @@ func (t *Tags) timeLine(album, in, file string) {
 			}
 			if argsTags {
 				t.write(args1)
+				readTags(args1).print(2, args1, false)
 			} else {
 				// Пригодится после консольного ввода тэгов
-				// albums = append(albums, album)
-				// titles = append(titles, file)
-				results = append(results, args1)
-				tlTags = append(tlTags, *t)
+				results = append(results, FATT{args1, album, file, *t})
 			}
 			f.Close()
 		}
