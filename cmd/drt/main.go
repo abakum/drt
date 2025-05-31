@@ -203,7 +203,7 @@ func main() {
 		// Выводим сведения о  args1
 		out, album, ext, title := oaet(args1)
 		if ext == ".csv" {
-			out = filepath.Dir(out)
+			// out = filepath.Dir(out)
 			// a
 
 			f, err := open(args1)
@@ -453,18 +453,20 @@ Artist=Иван Петров
 			err = cmd.Run()
 			log.Println(cmd.Args, err)
 			if err != nil {
-				log.Println(del, desktop, os.Remove(desktop))
+				log.Println(desktop, "~> /dev/null", os.Remove(desktop))
 			}
 
-			log.Println(del, local, os.Remove(local))
+			log.Println(local, "~> /dev/null", os.Remove(local))
+
 			cmd = exec.CommandContext(ctx, "update-desktop-database", application)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			log.Println(cmd.Args, cmd.Run())
 
-			log.Println(del, sh, os.Remove(sh))
-			log.Println(del, hard, os.Remove(hard))
+			log.Println(sh, "~> /dev/null", os.Remove(sh))
+
+			log.Println(hard, "~> /dev/null", os.Remove(hard))
 			return
 		}
 		// install
@@ -572,7 +574,7 @@ func rename(exe, s, t string) {
 	} else {
 		f, err = open(t)
 		if err != nil {
-			log.Println(exe, "~>", t, mkLink(exe, t, true, true))
+			log.Println(exe, "->", t, mkLink(exe, t, true, true))
 		} else {
 			f.Close()
 		}

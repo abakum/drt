@@ -89,7 +89,7 @@ func probe(dir, base string) {
 	rc, err := run(ctx, ffprobe, dir,
 		"-hide_banner",
 		"-v", "error",
-		"-show_entries", "stream=codec_name,bit_rate,sample_fmt,coded_width,coded_height",
+		"-show_entries", "stream=codec_name,bit_rate,sample_fmt,width,height,r_frame_rate,profile,level",
 		"-of", "default=noprint_wrappers=1",
 		base,
 	)
@@ -106,7 +106,8 @@ func probeV(dir, base string) {
 		"-hide_banner",
 		"-v", "error",
 		"-select_streams", "v:0",
-		"-show_entries", "stream=bit_rate,duration",
+		// "-show_entries", "stream=bit_rate,duration",
+		"-show_entries", "stream=codec_name,bit_rate,sample_fmt,width,height,r_frame_rate,profile,level",
 		"-of", "default=noprint_wrappers=1",
 		base,
 	)

@@ -444,7 +444,7 @@ func open(name string) (*os.File, error) {
 
 func probeA(inFile string, asr bool) {
 	switch strings.ToLower(filepath.Ext(inFile)) {
-	case ".mp3", ".flac", ".mov", "mp4", "m4a":
+	case ".mp3", ".flac", ".mov", ".3gp", "mp4", "m4a":
 	default:
 		return
 	}

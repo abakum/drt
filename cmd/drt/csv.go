@@ -71,6 +71,8 @@ func (t *Tags) timeLine(album, in, file string) {
 		inMp4  = filepath.Join(in, mp4)
 		mov    = file + ".mov"
 		inMov  = filepath.Join(in, mov)
+		gp3    = file + ".3gp"
+		inGp3  = filepath.Join(in, gp3)
 		alac   = file + ".alac.mov"
 		inAlac = filepath.Join(in, alac)
 	)
@@ -88,13 +90,12 @@ func (t *Tags) timeLine(album, in, file string) {
 		}
 	}
 	defer res.Close()
-	// slices.SortFunc(yourSlice, func(a, b T) int { return a.Date.Compare(b.Date) })
 	flacMp3 := "flac, mp3"
+	lpcm := !strings.HasSuffix(res.Name(), alac) && !strings.HasSuffix(res.Name(), mp4)
 	if isFirstAfterSecond(res.Name(), inMp3) ||
 		isFirstAfterSecond(res.Name(), inFlac) ||
-		isFirstAfterSecond(res.Name(), inAlac) {
+		lpcm && isFirstAfterSecond(res.Name(), inAlac) {
 		base := filepath.Base(res.Name())
-		lpcm := !strings.HasSuffix(res.Name(), alac) && !strings.HasSuffix(res.Name(), mp4)
 		opts := []string{
 			"-hide_banner",
 			"-v", "error",
@@ -113,7 +114,7 @@ func (t *Tags) timeLine(album, in, file string) {
 		if err == nil && rs == 0 {
 			if lpcm {
 				res.Close()
-				log.Println("Удаляем", res.Name(), os.Remove(res.Name()))
+				log.Println(res.Name(), "~>", inGp3, os.Rename(res.Name(), inGp3))
 			}
 		} else {
 			log.Println("Не удалось создать файлы", flacMp3, err, "код завершения", rs)
@@ -127,10 +128,10 @@ func (t *Tags) timeLine(album, in, file string) {
 		t.set("Из командной строки", newTags(etc...))
 	}
 
-	for i, args1 := range []string{inMp4, inAlac, inFlac, inMp3} {
+	for i, args1 := range []string{inGp3, inAlac, inMp4, inFlac, inMp3} {
 		f, err := open(args1)
 		if err == nil {
-			if i == 0 {
+			if i < 3 {
 				probe(filepath.Dir(args1), filepath.Base(args1))
 			} else {
 				log.Println(args1)
