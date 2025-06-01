@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/abakum/go-taglib"
 )
@@ -273,9 +274,6 @@ func (t *Tags) tMovement(in string) (title string) {
 // Соната си-бемоль мажор ~>Bb.
 // Соната си минор ~>Bm.
 func (t *Tags) tKey(title string) {
-	if _, ok := t.vals(taglib.InitialKey); ok {
-		return
-	}
 	fields := strings.Fields(strings.ToLower(title))
 	minor := ""
 	half := ""
@@ -353,6 +351,56 @@ loop:
 	t.setVals(taglib.InitialKey, note+half+minor)
 }
 
+// Ищем в title (val) или `val` или «val» и добавляем их в Subtitle=
+func (t *Tags) tSub(title string) {
+	// a `b` (c `d`) (e «f») «g»
+	vals := parseVals(title, "(", ")")
+	// "c `d`" "e «f»"
+	vals = append(vals, parseVals(title, "`", "`")...)
+	// "b" "d"
+	vals = append(vals, parseVals(title, "«", "»")...)
+	if len(vals) > 0 {
+		t.setVals(taglib.Subtitle, vals...)
+	}
+	// "f" "g"
+}
+
+func parseVal(input, dL, dR string) (val, next string) {
+	start := strings.Index(input, dL)
+	if start == -1 {
+		return
+	}
+	end := -1
+	if len(input) > start+1 {
+		end = start + 1 + strings.Index(input[start+1:], dR)
+	}
+
+	if end == -1 || end < start {
+		return
+	}
+
+	l := len(dL)
+	val = input[start+l : end]
+	if len(input) > end+l {
+		next = input[end+l:]
+	}
+	return
+}
+
+func parseVals(input, dL, dR string) (vals []string) {
+	for {
+		input = strings.TrimSpace(input)
+		if input == "" {
+			return
+		}
+		val, next := parseVal(input, dL, dR)
+		if val != "" {
+			vals = append(vals, val)
+		}
+		input = next
+	}
+}
+
 // Ищем в title инструмент и добавляем его в Grouping=
 // Ищем в title № и всё, что до него добавляем в Grouping=
 func (t *Tags) tGroup(title string) {
@@ -364,6 +412,8 @@ func (t *Tags) tGroup(title string) {
 		"синтезатора":  "Синтезатор",
 		"синтезаторов": "Синтезатор",
 		"фортепиано":   "Фортепиано",
+		"фортепианным": "Фортепиано",
+		"фортепианое":  "Фортепиано",
 		// Струнные смычковые: Скрипка, альт, виолончель, контрабас
 		"альта":       "Альт",
 		"альтов":      "Альт",
@@ -414,6 +464,21 @@ func (t *Tags) tGroup(title string) {
 		"баянов":      "Баян",
 		"гармони":     "Гармонь",
 		"гармоней":    "Гармонь",
+		// Вокал
+		"голоса":  "Вокал",
+		"голосов": "Вокал",
+		"баса":    "Вокал",
+		"басов":   "Вокал",
+		"тенора":  "Вокал",
+		"теноров": "Вокал",
+		"хора":    "Вокал",
+		"стихи":   "Вокал",
+		"слова":   "Вокал",
+		"капелла": "Вокал",
+		// Ансамбли
+		"орестром": "Оркестр",
+		"трио":     "Трио",
+		"квартет":  "Квартет",
 	}
 	fields := strings.Fields(strings.ToLower(title))
 	for _, field := range fields {
@@ -442,7 +507,35 @@ func open(name string) (*os.File, error) {
 	return f, nil
 }
 
-func probeA(inFile string, asr bool) {
+// func probeA(inFile string, asr bool) {
+// 	switch strings.ToLower(filepath.Ext(inFile)) {
+// 	case ".mp3", ".flac", ".mov", ".3gp", "mp4", "m4a":
+// 	default:
+// 		return
+// 	}
+// 	f, err := open(inFile)
+// 	if err != nil {
+// 		return
+// 	}
+// 	defer f.Close()
+
+// 	p, err := taglib.ReadProperties(f.Name())
+// 	if err != nil {
+// 		log.Println("a_bit_rate=?", err)
+// 		return
+// 	}
+// 	if p.Bitrate > 0 {
+// 		fmt.Printf("a_bit_rate=%d\r\n", p.Bitrate*1000)
+// 	}
+// 	if p.Length > 0 {
+// 		fmt.Printf("a_duration=%s\r\n", p.Length)
+// 	}
+// 	if asr && p.SampleRate > 0 {
+// 		fmt.Printf("a_sample_rate=%d\r\n", p.SampleRate)
+// 	}
+// }
+
+func sprobeA(inFile string, asr bool) (lines []string) {
 	switch strings.ToLower(filepath.Ext(inFile)) {
 	case ".mp3", ".flac", ".mov", ".3gp", "mp4", "m4a":
 	default:
@@ -456,30 +549,30 @@ func probeA(inFile string, asr bool) {
 
 	p, err := taglib.ReadProperties(f.Name())
 	if err != nil {
-		log.Println("a_bit_rate=?", err)
 		return
 	}
 	if p.Bitrate > 0 {
-		fmt.Printf("a_bit_rate=%d\r\n", p.Bitrate*1000)
+		lines = append(lines, fmt.Sprintf("a_bit_rate=%d kb/s", p.Bitrate))
 	}
 	if p.Length > 0 {
-		fmt.Printf("a_duration=%s\r\n", p.Length)
+		lines = append(lines, fmt.Sprint("a_duration=", time.Duration(p.Length)))
 	}
 	if asr && p.SampleRate > 0 {
-		fmt.Printf("a_sample_rate=%d\r\n", p.SampleRate)
+		lines = append(lines, fmt.Sprintf("a_sample_rate=%d", p.SampleRate))
 	}
+	return
 }
 
-// Если ключа key нет устанавливаем его в val.
+// Если ключа key нет устанавливаем его в tags.
 // Если ключ key есть то присваиваем его val.
-func (t *Tags) kvv(key string, val *string) {
+func (t *Tags) kvv(key string, val *string, tags *Tags) {
 	if vals, ok := t.vals(key); ok {
 		*val = ""
 		if len(vals) > 0 {
 			*val = strings.Join(vals, "/")
 		}
 	} else {
-		t.setVals(key, *val)
+		tags.setVals(key, *val)
 	}
 }
 
@@ -519,21 +612,27 @@ func (t *Tags) setVals(key string, vals ...string) {
 // album/album tracknumber composer title часть 1
 // album/album tracknumber Имя_Фамилия title части 1 Медленно_и_печально
 func (t *Tags) parse(album, file string) {
-	t.kvv(taglib.Album, &album)
+	tags := newTags()
+	t.kvv(taglib.Album, &album, &tags)
 	if _, ok := t.vals(taglib.Date); !ok {
 		date := strings.Fields(album)[0]
 		if _, err := strconv.Atoi(date); err == nil {
 			if len(date) > 7 {
-				t.setVals(taglib.Date, date[:4], date[:8])
+				// t.setVals(taglib.Date, date[:4], date[:8])
+				tags.setVals(taglib.Date, date[:8])
 			} else {
-				t.setVals(taglib.Date, date[:4])
+				tags.setVals(taglib.Date, date[:4])
 			}
 		}
 	}
 	titleSort, _ := t.vals(taglib.TitleSort)
+	ts := "Тэги из имени файла="
 	if len(titleSort) > 0 {
+		ts = "Тэги из TitleSort="
 		file = titleSort[0]
 	}
+	ts += file
+
 	title := strings.TrimPrefix(file, album)
 	title = strings.TrimSpace(title)
 
@@ -544,7 +643,7 @@ func (t *Tags) parse(album, file string) {
 		title = strings.TrimSpace(title)
 		//Моцарт Соната для фортепиано 9 pе мажор
 		if _, ok := t.vals(taglib.TrackNumber); !ok {
-			t.setVals(taglib.TrackNumber, tracknumber)
+			tags.setVals(taglib.TrackNumber, tracknumber)
 		}
 		composer := strings.Fields(title)[0]
 		if composer != title {
@@ -552,15 +651,19 @@ func (t *Tags) parse(album, file string) {
 			title = strings.TrimSpace(title)
 			//Соната для фортепиано 9 pе мажор
 			if _, ok := t.vals(taglib.Composer); !ok {
-				t.setVals(taglib.Composer, strings.ReplaceAll(composer, "_", " "))
+				tags.setVals(taglib.Composer, strings.ReplaceAll(composer, "_", " "))
 			}
 		}
 	}
 
-	t.tKey(title)
-	t.tGroup(title)
-	title = t.tMovement(title)
-	t.kvv(taglib.Title, &title)
+	if _, ok := t.vals(taglib.InitialKey); !ok {
+		tags.tKey(title)
+	}
+	tags.tGroup(title)
+	tags.tSub(title)
+	title = tags.tMovement(title)
+	t.kvv(taglib.Title, &title, &tags)
+	t.add(ts, tags)
 }
 
 func (t *Tags) csv(file string, row *Row, keys ...string) {

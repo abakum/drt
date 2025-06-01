@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type FATT struct {
@@ -43,10 +42,17 @@ func (r Row) val(key string) (val string) {
 	return
 }
 
-func (r Row) print(key string) {
+// func (r Row) print(key string) {
+// 	if val := r.val(key); val != "" {
+// 		fmt.Println(key + "=" + val)
+// 	}
+// }
+
+func (r Row) sprint(key string) (kv string) {
 	if val := r.val(key); val != "" {
-		fmt.Println(key + "=" + val)
+		kv = key + "=" + val
 	}
+	return
 }
 
 func isFirstAfterSecond(first, second string) bool {
@@ -61,7 +67,10 @@ func isFirstAfterSecond(first, second string) bool {
 	return false
 }
 
-func (t *Tags) timeLine(album, in, file string) {
+func (t *Tags) timeLine(album, in, file, a string) {
+	if a == "" {
+		return
+	}
 	var (
 		mp3    = file + ".mp3"
 		inMp3  = filepath.Join(in, mp3)
@@ -90,27 +99,39 @@ func (t *Tags) timeLine(album, in, file string) {
 		}
 	}
 	defer res.Close()
-	flacMp3 := "flac, mp3"
-	lpcm := !strings.HasSuffix(res.Name(), alac) && !strings.HasSuffix(res.Name(), mp4)
+	flacMp3 := ""
+	// lpcm := !strings.HasSuffix(res.Name(), alac) && !strings.HasSuffix(res.Name(), mp4)
+	lpcm := false
 	if isFirstAfterSecond(res.Name(), inMp3) ||
 		isFirstAfterSecond(res.Name(), inFlac) ||
 		lpcm && isFirstAfterSecond(res.Name(), inAlac) {
 		base := filepath.Base(res.Name())
-		opts := []string{
+		args := []string{
 			"-hide_banner",
 			"-v", "error",
 			"-i", base,
-			"-vn", "-compression_level", "12", "-y", flac,
-			"-vn", "-q", "0", "-joint_stereo", "0", "-y", mp3,
 		}
-		if lpcm {
-			flacMp3 = flacMp3 + ", alac.mov"
-			opts = append(opts,
+		switch a {
+		case "pcm_f32le", "pcm_s16le", "pcm_s24le", "pcm_s32le":
+			lpcm = true
+			flacMp3 = "alac.mov, flac , mp3"
+			args = append(args,
 				"-c:v", "copy", "-c:a", "alac", "-y", alac,
+				"-vn", "-compression_level", "12", "-y", flac,
 			)
+		case "flac", "alac":
+			flacMp3 = "flac, mp3"
+			args = append(args,
+				"-vn", "-compression_level", "12", "-y", flac,
+			)
+		default:
+			flacMp3 = "mp3"
 		}
+		args = append(args,
+			"-vn", "-q", "0", "-joint_stereo", "0", "-y", mp3,
+		)
 		log.Println("Результат в", filepath.Ext(base), "Создаём", flacMp3)
-		rs, err := run(ctx, "ffmpeg", in, opts...)
+		rs, err := run(ctx, os.Stdout, "ffmpeg", in, args...)
 		if err == nil && rs == 0 {
 			if lpcm {
 				res.Close()
@@ -123,6 +144,7 @@ func (t *Tags) timeLine(album, in, file string) {
 		log.Println("Файлы", flacMp3, "моложе чем", res.Name())
 	}
 
+	t.print(2, file, false)
 	t.parse(album, file)
 	if argsTags {
 		t.set("Из командной строки", newTags(etc...))
@@ -132,10 +154,10 @@ func (t *Tags) timeLine(album, in, file string) {
 		f, err := open(args1)
 		if err == nil {
 			if i < 3 {
-				probe(filepath.Dir(args1), filepath.Base(args1))
+				log.Println(probe(filepath.Dir(args1), filepath.Base(args1), true))
 			} else {
 				log.Println(args1)
-				probeA(args1, true)
+				log.Println(sprobeA(args1, true))
 			}
 			if argsTags {
 				t.write(args1)

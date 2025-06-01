@@ -126,7 +126,7 @@ func main() {
 		} else {
 			root = "."
 		}
-		rc, err = run(ctx, strings.ToLower(args0), root, os.Args[1:]...)
+		rc, err = run(ctx, os.Stdout, strings.ToLower(args0), root, os.Args[1:]...)
 		if err != nil {
 			panic(err)
 		}
@@ -202,6 +202,8 @@ func main() {
 	for _, args1 := range files {
 		// Выводим сведения о  args1
 		out, album, ext, title := oaet(args1)
+		a := ""
+		probes := []string{}
 		if ext == ".csv" {
 			// out = filepath.Dir(out)
 			// a
@@ -258,23 +260,31 @@ func main() {
 					if len(fileTags) == 0 {
 						fileTags.add("", readTags(inFile))
 					}
-					// csvTags.add("", fileTags)
 					if audio {
-						probeA(inFile, false)
+						log.Println(sprobeA(inFile, false),
+							row.sprint("Audio Bit Depth"),
+							row.sprint("Audio Sample Rate"),
+							row.sprint("Audio Codec"))
+
 					} else {
-						probeV(in, file)
-						row.print("Resolution")
-						row.print("Frame Rate")
-						row.print("Video Codec")
+						a, probes = probe(in, file, true)
+						log.Println(probes,
+							row.sprint("Resolution"),
+							row.sprint("Frame Rate"),
+							row.sprint("Video Codec"),
+							row.sprint("Audio Bit Depth"),
+							row.sprint("Audio Sample Rate"),
+							row.sprint("Audio Codec"),
+						)
 					}
-					row.print("Audio Bit Depth")
-					row.print("Audio Sample Rate")
-					row.print("Audio Codec")
+					// row.print("Audio Bit Depth")
+					// row.print("Audio Sample Rate")
+					// row.print("Audio Codec")
 					continue
 				}
 				resTags := newTags()
 				resTags.csv(file, row, "Description", "Keywords", "Comments")
-				resTags.timeLine(album, out, file)
+				resTags.timeLine(album, out, file, a)
 			}
 			f.Close()
 			// csvTags.print(2, "Тэги из "+args1, false)
@@ -283,12 +293,15 @@ func main() {
 
 		// Это не csv
 
-		probe(filepath.Dir(args1), filepath.Base(args1))
-		probeA(args1, true)
+		a, probes = probe(filepath.Dir(args1), filepath.Base(args1), false)
+		fmt.Println(append(probes, sprobeA(args1, true)...))
 
 		fileTags := readTags(args1)
-		fileTags.parse(album, title)
 		fileTags.print(2, args1, false)
+
+		fileTags.timeLine(album, out, title, a)
+
+		fileTags.parse(album, title)
 
 		if argsTags {
 			fileTags.set("Меняю", newTags(etc...))
@@ -337,8 +350,8 @@ func main() {
 			result.tags.write(result.file)
 
 			result.tags = readTags(result.file)
-			result.tags.parse(result.album, result.title)
 			result.tags.print(2, result.file, false)
+			result.tags.parse(result.album, result.title)
 		}
 	}
 }

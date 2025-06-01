@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"codeberg.org/gruf/go-ffmpreg/ffmpreg"
@@ -18,7 +23,7 @@ const (
 	ffmpeg  = "ffmpeg"
 )
 
-func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err error) {
+func run(ctx context.Context, writer io.Writer, bin, root string, args ...string) (rc uint32, err error) {
 	qArgs := []string{bin}
 	for _, arg := range args {
 		if strings.Contains(arg, " ") {
@@ -47,7 +52,7 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 				cmd := exec.CommandContext(ctx, path, args...)
 				cmd.Dir = root
 				cmd.Stdin = os.Stdin
-				cmd.Stdout = os.Stdout
+				cmd.Stdout = writer
 				cmd.Stderr = os.Stderr
 				err = cmd.Run()
 				return uint32(cmd.ProcessState.ExitCode()), err
@@ -83,35 +88,82 @@ func run(ctx context.Context, bin, root string, args ...string) (rc uint32, err 
 	return
 }
 
-func probe(dir, base string) {
+func probe(dir, base string, video bool) (audio string, lines []string) {
 	log.Println(filepath.Join(dir, base))
-
-	rc, err := run(ctx, ffprobe, dir,
+	args := []string{
 		"-hide_banner",
 		"-v", "error",
+	}
+	if video {
+		args = append(args,
+			"-select_streams", "v:0",
+		)
+	}
+	args = append(args,
 		"-show_entries", "stream=codec_name,bit_rate,sample_fmt,width,height,r_frame_rate,profile,level",
 		"-of", "default=noprint_wrappers=1",
 		base,
 	)
+	var spy bytes.Buffer
+
+	rc, err := run(ctx, bufio.NewWriter(&spy), ffprobe, dir, args...)
 	if err != nil {
 		log.Println("ошибка", err, "код завершения", ffprobe, rc)
+		return
 	}
-
-}
-
-func probeV(dir, base string) {
-	log.Println(filepath.Join(dir, base))
-
-	rc, err := run(ctx, ffprobe, dir,
-		"-hide_banner",
-		"-v", "error",
-		"-select_streams", "v:0",
-		// "-show_entries", "stream=bit_rate,duration",
-		"-show_entries", "stream=codec_name,bit_rate,sample_fmt,width,height,r_frame_rate,profile,level",
-		"-of", "default=noprint_wrappers=1",
-		base,
-	)
-	if err != nil {
-		log.Println("bit_rate=?", err, "код завершения", ffprobe, rc)
+	br := "bit_rate="
+	i := 1
+	for {
+		line, err := spy.ReadString('\n')
+		if err != nil {
+			return
+		}
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "codec_name="):
+			switch i {
+			case 1:
+				//Видео
+			case 2:
+				//Аудио
+				audio = strings.Split(line, "=")[1]
+			default:
+				return
+			}
+			i++
+		case strings.Contains(line, "=0"):
+			continue
+		case strings.Contains(line, "=N/A"):
+			continue
+		case strings.Contains(line, "=unknown"):
+			continue
+		case strings.HasPrefix(line, br):
+			val := strings.TrimPrefix(line, br)
+			if i, err := strconv.Atoi(val); err == nil {
+				line = fmt.Sprintf(br+"%d kb/s", i/1000)
+			}
+		}
+		// if strings.HasPrefix(line, "codec_name=") {
+		// 	if i > 2 {
+		// 		return
+		// 	}
+		// 	i++
+		// }
+		// if strings.Contains(line, "=0") {
+		// 	continue
+		// }
+		// if strings.Contains(line, "=N/A") {
+		// 	continue
+		// }
+		// if strings.Contains(line, "=unknown") {
+		// 	continue
+		// }
+		// if strings.HasPrefix(line, br) {
+		// 	val := strings.TrimPrefix(line, br)
+		// 	if i, err := strconv.Atoi(val); err == nil {
+		// 		line = fmt.Sprintf(br+"%d kb/s", i/1000)
+		// 	}
+		// }
+		lines = append(lines, line)
 	}
 }
