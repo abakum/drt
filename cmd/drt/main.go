@@ -37,14 +37,12 @@ import (
 const (
 	drt    = "drt"    // для консоли
 	drTags = "drTags" // для GUI
-	del    = "Удаляю"
 )
 
 var (
 	ctx      context.Context
 	cncl     context.CancelFunc
-	argsTags bool
-	etc      []string
+	argsTags bool // Тэги в командной строке
 	win      = runtime.GOOS == "windows"
 	// a/b.c
 	args0 = filepath.Base(os.Args[0])
@@ -54,10 +52,12 @@ var (
 	// a
 	ext string
 	// .c
+	sources = make(map[string]*ATT) // Файлы источники
+	etc     = []string{}            // Тэги
 )
 
 func main() {
-	args0 = strings.TrimSuffix(args0, filepath.Ext(args0))
+	args0 = trimExt(args0)
 	// b
 	var (
 		rc   uint32
@@ -150,12 +150,6 @@ func main() {
 		}
 	}
 
-	// drt file... fileX param... paramY
-	files := []string{}
-	// [file... fileX]
-	etc = []string{}
-	// [param... paramY]
-
 	nautilus := os.Getenv("NAUTILUS_SCRIPT_SELECTED_FILE_PATHS")
 	nautilus = strings.TrimSpace(nautilus)
 
@@ -176,7 +170,7 @@ func main() {
 		help()
 		return
 	}
-
+	//---------------------------------------------------------------------------
 	for _, args1 := range args {
 		args1, err := filepath.Abs(args1)
 		if err != nil {
@@ -187,128 +181,42 @@ func main() {
 			break
 		}
 		f.Close()
-		files = append(files, args1)
+		if _, ok := sources[args1]; !ok {
+			sources[args1] = &ATT{}
+		}
 	}
-	if len(files) < 1 {
+	if len(sources) < 1 {
 		help()
 		return
 	}
 
-	if len(args) > len(files) {
-		etc = args[len(files):]
+	if len(args) > len(sources) {
+		etc = args[len(sources):]
 	}
 	argsTags = strings.Contains(strings.Join(etc, " "), "=")
 
-	for _, args1 := range files {
-		// Выводим сведения о  args1
-		out, album, ext, title := oaet(args1)
-		a := ""
-		probes := []string{}
+	for file, source := range sources {
+		out, album, ext, title := oaet(file)
 		if ext == ".csv" {
-			// out = filepath.Dir(out)
-			// a
-
-			f, err := open(args1)
-			if err != nil {
-				log.Fatalln("Ошибка открытия", err)
-				continue
-			}
-
-			// Читаем заголовок metadata.csv UTF-16 LE BOM
-			utf := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)
-			nr := csv.NewReader(utf.NewDecoder().Reader(f))
-			i := 0
-			vals, err := nr.Read()
-			i++
-			if err != nil {
-				log.Fatalln("Ошибка разбора заголовка", err, vals)
-				f.Close()
-				continue
-			}
-			row := newRow(vals)
-			// log.Println("Результаты в", out)
-			// csvTags := newTags()
-			//Читаем остальные строки metadata.csv
-			for {
-				var err error
-				row.vals, err = nr.Read()
-				i++
-				if err != nil {
-					if errors.Is(err, io.EOF) {
-						break
-					}
-					log.Println("Ошибка разбора строки", i, vals)
-					continue
-				}
-				file := row.val("File Name")
-				audio := row.val("Resolution") == ""
-				image := row.val("Duration TC") == "00:00:00:01"
-				in := row.val("Clip Directory")
-				inFile := filepath.Join(in, file)
-				if in != "" {
-					if image {
-						continue
-					}
-					// Файл
-					fileTags := newTags()
-					fileTags.csv(file, row, "Description", "Keywords", "Comments")
-					if audio {
-						fileTags.print(2, "Аудио "+inFile, true)
-					} else {
-						fileTags.print(2, "Видео "+inFile, true)
-					}
-					if len(fileTags) == 0 {
-						fileTags.add("", readTags(inFile))
-					}
-					if audio {
-						log.Println(sprobeA(inFile, false),
-							row.sprint("Audio Bit Depth"),
-							row.sprint("Audio Sample Rate"),
-							row.sprint("Audio Codec"))
-
-					} else {
-						a, probes = probe(in, file, true)
-						log.Println(probes,
-							row.sprint("Resolution"),
-							row.sprint("Frame Rate"),
-							row.sprint("Video Codec"),
-							row.sprint("Audio Bit Depth"),
-							row.sprint("Audio Sample Rate"),
-							row.sprint("Audio Codec"),
-						)
-					}
-					// row.print("Audio Bit Depth")
-					// row.print("Audio Sample Rate")
-					// row.print("Audio Codec")
-					continue
-				}
-				resTags := newTags()
-				resTags.csv(file, row, "Description", "Keywords", "Comments")
-				resTags.timeLine(album, out, file, a)
-			}
-			f.Close()
-			// csvTags.print(2, "Тэги из "+args1, false)
+			drCSV(album, out, file)
 			continue
 		}
 
-		// Это не csv
+		_, probes := probe(filepath.Dir(file), filepath.Base(file), false)
+		fmt.Println(append(probes, probeA(file, true)...))
 
-		a, probes = probe(filepath.Dir(args1), filepath.Base(args1), false)
-		fmt.Println(append(probes, sprobeA(args1, true)...))
+		source.album = album
+		source.title = title
+		source.tags = readTags(file)
+		source.tags.print(2, file, false)
 
-		fileTags := readTags(args1)
-		fileTags.print(2, args1, false)
-
-		fileTags.timeLine(album, out, title, a)
-
-		fileTags.parse(album, title)
+		source.tags.parse(album, title)
 
 		if argsTags {
-			fileTags.set("Меняю", newTags(etc...))
-			fileTags.write(args1)
-			readTags(args1).print(2, args1, false)
+			source.tags.set("Меняю", newTags(etc...))
+			source.tags.write(file)
+			readTags(file).print(2, file, false)
 		}
-
 	}
 	if argsTags || len(etc) > 0 || dash {
 		// drt file tag=
@@ -317,15 +225,8 @@ func main() {
 		return
 	}
 	// drt file
-	for _, result := range results {
-		result.tags.print(2, result.file, true)
-	}
-	for _, file := range files {
-		_, album, ext, title := oaet(file)
-		if ext == ".csv" {
-			continue
-		}
-		results = append(results, FATT{file, album, title, readTags(file)})
+	for file, result := range results {
+		result.tags.print(2, file, true)
 	}
 	r := bufio.NewReader(os.Stdin)
 	for {
@@ -344,16 +245,51 @@ func main() {
 			}
 			break
 		}
-		// log.Println(etc)
-		for _, result := range results {
-			result.tags.set("", newTags(etc...))
-			result.tags.write(result.file)
-
-			result.tags = readTags(result.file)
-			result.tags.print(2, result.file, false)
-			result.tags.parse(result.album, result.title)
+		tags := newTags(etc...)
+		if _, ok := tags["=="]; ok {
+			delete(tags, "==")
+			// Нельзя делать цикл по sources так как timeLine добавляет в sources
+			files := []string{} // Список файлов
+			for file := range sources {
+				files = append(files, file)
+			}
+			for _, file := range files {
+				a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
+				fmt.Println(append(probes, probeA(file, true)...))
+				source := sources[file]
+				source.tags.set("", tags)
+				source.tags.write(file)
+				// добавляет и в sources и в  results
+				source.tags.timeLine(source.album, filepath.Dir(file), file, a)
+			}
+		}
+		for file, att := range sources {
+			_, _, ext, _ := oaet(file)
+			if ext == ".csv" {
+				// drCSV(album, out, file)
+				continue
+			}
+			if Ext(file) == ".csv" {
+				continue
+			}
+			swrpp(file, att, tags)
+		}
+		for file, att := range results {
+			swrpp(file, att, tags)
 		}
 	}
+}
+func swrpp(file string, att *ATT, tags Tags) {
+	att.tags.set("", tags)
+	att.tags.write(file)
+
+	att.tags = readTags(file)
+	att.tags.print(2, file, false)
+	att.tags.parse(att.album, att.title)
+}
+
+func Ext(path string) string {
+	return strings.ToLower(filepath.Ext(path))
 }
 
 func oaet(args1 string) (out, album, ext, title string) {
@@ -362,13 +298,13 @@ func oaet(args1 string) (out, album, ext, title string) {
 	// a/b
 	album = filepath.Base(out)
 	// b
-	ext = filepath.Ext(args1)
+	ext = Ext(args1)
 	// .d
 	title = filepath.Base(args1)
 	// c.d
-	title = strings.TrimSuffix(title, ext)
+	// title = strings.TrimSuffix(title, ext)
+	title = trimExt(title)
 	// c
-	ext = strings.ToLower(ext)
 	return
 }
 
@@ -430,6 +366,13 @@ Artist=Иван Петров
 Если в консольном вводе первая строка не начинается с тэга то это значение к тэгу Comment
 Завершай консольный ввод пустой строкой. Чтоб ввести пустую строку в Comment введи /
 Чтоб убрать все значение тэга X введи X=. Чтоб убрать значение всех тэгов введи =
+Если в видеофайле звук:
+ - в pcm и ввести == то запишу .mp4 со звуком в alac, .flac, .mp3
+ - в alac или flac и ввести == то запишу .flac, .mp3
+ - иначе запишу a.mp3
+Если в аудиофайле звук:
+ - в pcm в alac или flac и ввести == то запишу a.flac, a.mp3
+ - иначе запишу a.mp3 если аудиофайл не .mp3
 
 Остальные тэги https://taglib.org/api/p_propertymapping.html
 Расширенно про mp3 https://id3.org/id3v2.3.0
@@ -600,4 +543,87 @@ func ctrlC() {
 	}
 	log.Println("Жми ^C")
 	closer.Hold()
+}
+
+func drCSV(album, out, args1 string) {
+	f, err := open(args1)
+	if err != nil {
+		log.Fatalln("Ошибка открытия", err)
+		return
+	}
+	defer f.Close()
+
+	// Читаем заголовок metadata.csv UTF-16 LE BOM
+	utf := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)
+	nr := csv.NewReader(utf.NewDecoder().Reader(f))
+	i := 0
+	vals, err := nr.Read()
+	i++
+	if err != nil {
+		log.Fatalln("Ошибка разбора заголовка", err, vals)
+		return
+	}
+	row := newRow(vals)
+	// csvTags := newTags()
+	//Читаем остальные строки metadata.csv
+	for {
+		var err error
+		row.vals, err = nr.Read()
+		i++
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return
+			}
+			log.Println("Ошибка разбора строки", i, vals)
+			continue
+		}
+		fileName := row.val("File Name")
+		in := row.val("Clip Directory")
+		if in == "" {
+			// timeLine
+			resTags := newTags()
+			resTags.csv(fileName, row, "Description", "Keywords", "Comments")
+			resTags.timeLine(album, out, fileName, "csv")
+			continue
+		}
+		return
+		image := row.val("Duration TC") == "00:00:00:01"
+		if image {
+			continue
+		}
+		// Файл
+		fileTags := newTags()
+		fileTags.csv(fileName, row, "Description", "Keywords", "Comments")
+		inFile := filepath.Join(in, fileName)
+		audio := row.val("Resolution") == ""
+		if audio {
+			fileTags.print(2, "Аудио "+inFile, true)
+		} else {
+			fileTags.print(2, "Видео "+inFile, true)
+		}
+		if len(fileTags) == 0 {
+			fileTags.add("", readTags(inFile))
+		}
+		if audio {
+			log.Println(probeA(inFile, false),
+				row.print("Audio Bit Depth"),
+				row.print("Audio Sample Rate"),
+				row.print("Audio Codec"))
+
+		} else {
+			_, probes := probe(in, fileName, true)
+			log.Println(probes,
+				row.print("Resolution"),
+				row.print("Frame Rate"),
+				row.print("Video Codec"),
+				row.print("Audio Bit Depth"),
+				row.print("Audio Sample Rate"),
+				row.print("Audio Codec"),
+			)
+		}
+	}
+}
+
+func trimExt(args0 string) string {
+	return strings.TrimSuffix(args0, filepath.Ext(args0))
 }

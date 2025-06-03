@@ -179,6 +179,11 @@ func newTags(ss ...string) (tags Tags) {
 				kva = []string{key, kva[0]}
 			} else {
 				if key == "" && strings.TrimSpace(kva[1]) == "" {
+					if len(kva) > 2 && strings.TrimSpace(kva[2]) == "" {
+						// ffmpeg
+						tags = Tags{"==": nil}
+						continue
+					}
 					// С чистого листа
 					tags = Tags{"=": nil}
 					continue
@@ -507,36 +512,8 @@ func open(name string) (*os.File, error) {
 	return f, nil
 }
 
-// func probeA(inFile string, asr bool) {
-// 	switch strings.ToLower(filepath.Ext(inFile)) {
-// 	case ".mp3", ".flac", ".mov", ".3gp", "mp4", "m4a":
-// 	default:
-// 		return
-// 	}
-// 	f, err := open(inFile)
-// 	if err != nil {
-// 		return
-// 	}
-// 	defer f.Close()
-
-// 	p, err := taglib.ReadProperties(f.Name())
-// 	if err != nil {
-// 		log.Println("a_bit_rate=?", err)
-// 		return
-// 	}
-// 	if p.Bitrate > 0 {
-// 		fmt.Printf("a_bit_rate=%d\r\n", p.Bitrate*1000)
-// 	}
-// 	if p.Length > 0 {
-// 		fmt.Printf("a_duration=%s\r\n", p.Length)
-// 	}
-// 	if asr && p.SampleRate > 0 {
-// 		fmt.Printf("a_sample_rate=%d\r\n", p.SampleRate)
-// 	}
-// }
-
-func sprobeA(inFile string, asr bool) (lines []string) {
-	switch strings.ToLower(filepath.Ext(inFile)) {
+func probeA(inFile string, asr bool) (lines []string) {
+	switch Ext(inFile) {
 	case ".mp3", ".flac", ".mov", ".3gp", "mp4", "m4a":
 	default:
 		return

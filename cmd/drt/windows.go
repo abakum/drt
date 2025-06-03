@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -64,7 +63,7 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 		}
 		return
 	}
-	name := strings.TrimSuffix(newname, filepath.Ext(newname))
+	name := trimExt(newname)
 	err = os.WriteFile(name+".cmd", []byte(oldname+" %*"), 0744)
 	if err != nil {
 		log.Println("Error write .cmd:", err)

@@ -5,8 +5,6 @@ package main
 import (
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
 func mkLink(oldname, newname string, link, hard bool) (err error) {
@@ -27,7 +25,7 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 		log.Printf("Error creating %s link: %v\n", m, err)
 		return
 	}
-	name := strings.TrimSuffix(newname, filepath.Ext(newname))
+	name := trimExt(newname)
 	err = os.WriteFile(name+".sh", []byte(oldname+" %*"), 0744)
 	if err != nil {
 		log.Println("Error write .sh:", err)
