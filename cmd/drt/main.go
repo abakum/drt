@@ -14,9 +14,16 @@ package main
 //sudo dpkg -i drt.deb
 //sudo desktop-file-install --set-key=Exec --set-value="drt %F" /usr/share/applications/drt.desktop
 
+//go install github.com/tc-hib/go-winres@latest
+//go-winres init
+//go get github.com/abakum/version
+//go generate
+//icon c:\Windows\System32\imageres.dll@5332
+
 import (
 	"bufio"
 	"context"
+	_ "embed"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -29,6 +36,7 @@ import (
 	"runtime"
 	"strings"
 
+	version "github.com/abakum/version/lib"
 	"github.com/adrg/xdg"
 	"github.com/xlab/closer"
 	"golang.org/x/text/encoding/unicode"
@@ -56,6 +64,13 @@ var (
 	etc     = []string{}            // Тэги
 )
 
+var _ = version.Ver
+
+//go:generate go run github.com/abakum/version
+
+//go:embed VERSION
+var VERSION string
+
 func main() {
 	args0 = trimExt(args0)
 	// b
@@ -76,6 +91,7 @@ func main() {
 			log.Fatalf("Где я? %v", err)
 		}
 	}
+	log.Println(exe, VERSION)
 
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()
@@ -506,6 +522,7 @@ func swap(sts ...ST) {
 			return
 		}
 		st.dr = filepath.Join(st.root, st.p, drTags+ext)
+		os.Remove(st.dr) // если старая ссылка не на drt то удалится
 		stm[i > 0] = st
 	}
 	i := false

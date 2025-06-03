@@ -2,6 +2,8 @@ codeberg.org/gruf/go-ffmpreg v0.6.7 h1:WBAgmHT58oqHBm6ckU1jPz7qamqFJj/Uag0yalevp
 codeberg.org/gruf/go-ffmpreg v0.6.7/go.mod h1:tGqIMh/I2cizqauxxNAN+WGkICI0j5G3xwF1uBkyw1E=
 github.com/abakum/go-taglib v0.0.0-20250513222931-86836a7b453e h1:LMIgN5y8fjhzudX1iHP2NaWfj64eoRytjejEbpLl8TU=
 github.com/abakum/go-taglib v0.0.0-20250513222931-86836a7b453e/go.mod h1:giPS4NdDmetot4vHKw9JqkWWeOjSOZAYfyXO9b8tXuU=
+github.com/abakum/version v0.1.4-lw h1:ynPFVpY+6xuIAmkvrbSaWwwNhbcW2QlqhPGHMSGIBfA=
+github.com/abakum/version v0.1.4-lw/go.mod h1:v/GcSOIBPOVwI7Mk7sKiMGih9sQH1tWdfpzF6VPW/ws=
 github.com/adrg/xdg v0.5.3 h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=
 github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

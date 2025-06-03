@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -206,14 +207,45 @@ func newTags(ss ...string) (tags Tags) {
 	return
 }
 
+func deleteFirstNotLetter(s string) string {
+	re := regexp.MustCompile(`^[^\p{Letter}]*`)
+	return re.ReplaceAllString(s, "")
+}
+func removeFirstNonLatinCyrillic(s string) string {
+	re := regexp.MustCompile(`^[^\p{Latin}\p{Cyrillic}]*`)
+	return re.ReplaceAllString(s, "")
+}
+
 func (t *Tags) write(args1 string) {
 	t.delEmpty()
+
+	uniq := make(map[string]bool) // отбросим повторения хэштэгов
+	for _, vs := range *t {
+		for _, v := range vs {
+			uniq[v] = true
+		}
+	}
+	var hashTags []string // Список #хэштэгов
+	for k := range uniq {
+		k = removeFirstNonLatinCyrillic(k)
+		if len(k) > 0 {
+			k = strings.Replace(k, "#", "d", -1) // C#m~>Cdm
+			hashTags = append(hashTags, "#"+strings.Replace(k, " ", "_", -1))
+		}
+	}
+	slices.Sort(hashTags) // упорядочим хэштэги
+
+	if len(hashTags) > 0 {
+		t.setVals("HASHTAGS", strings.Join(hashTags, " "))
+	}
+
 	for _, key := range []string{"DESCRIPTION", taglib.Comment} {
 		vals, ok := t.vals(key)
 		if ok {
 			t.setVals(key, strings.Join(vals, "\n"))
 		}
 	}
+
 	if _, ok := t.vals("ENCODER"); ok {
 		t.setVals("ENCODER", "drTags")
 	}

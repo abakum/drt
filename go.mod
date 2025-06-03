@@ -14,3 +14,5 @@ require (
 	github.com/xlab/closer v1.1.0
 	golang.org/x/sys v0.26.0
 )
+
+require github.com/abakum/version v0.1.4-lw // indirect
