@@ -103,8 +103,6 @@ func (t *Tags) timeLine(album, in, title, a string) {
 		a, probes = probe(in, base, false)
 		fmt.Println(append(probes, probeA(res.Name(), true)...))
 		sources[res.Name()] = &ATT{album, title, *t}
-	} else {
-		// t.add(res.Name(), readTags(res.Name()))
 	}
 	// lpcm := !strings.HasSuffix(res.Name(), alac) && !strings.HasSuffix(res.Name(), mp4)
 	lpcm := false

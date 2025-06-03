@@ -259,6 +259,7 @@ func main() {
 				source := sources[file]
 				source.tags.set("", tags)
 				source.tags.write(file)
+				source.tags = readTags(file)
 				// добавляет и в sources и в  results
 				source.tags.timeLine(source.album, filepath.Dir(file), file, a)
 			}
@@ -586,41 +587,39 @@ func drCSV(album, out, args1 string) {
 			resTags.timeLine(album, out, fileName, "csv")
 			continue
 		}
-		return
-		image := row.val("Duration TC") == "00:00:00:01"
-		if image {
-			continue
-		}
-		// Файл
-		fileTags := newTags()
-		fileTags.csv(fileName, row, "Description", "Keywords", "Comments")
-		inFile := filepath.Join(in, fileName)
-		audio := row.val("Resolution") == ""
-		if audio {
-			fileTags.print(2, "Аудио "+inFile, true)
-		} else {
-			fileTags.print(2, "Видео "+inFile, true)
-		}
-		if len(fileTags) == 0 {
-			fileTags.add("", readTags(inFile))
-		}
-		if audio {
-			log.Println(probeA(inFile, false),
-				row.print("Audio Bit Depth"),
-				row.print("Audio Sample Rate"),
-				row.print("Audio Codec"))
+		// image := row.val("Duration TC") == "00:00:00:01"
+		// if image {
+		// 	continue
+		// }
+		// fileTags := newTags()
+		// fileTags.csv(fileName, row, "Description", "Keywords", "Comments")
+		// inFile := filepath.Join(in, fileName)
+		// audio := row.val("Resolution") == ""
+		// if audio {
+		// 	fileTags.print(2, "Аудио "+inFile, true)
+		// } else {
+		// 	fileTags.print(2, "Видео "+inFile, true)
+		// }
+		// if len(fileTags) == 0 {
+		// 	fileTags.add("", readTags(inFile))
+		// }
+		// if audio {
+		// 	log.Println(probeA(inFile, false),
+		// 		row.print("Audio Bit Depth"),
+		// 		row.print("Audio Sample Rate"),
+		// 		row.print("Audio Codec"))
 
-		} else {
-			_, probes := probe(in, fileName, true)
-			log.Println(probes,
-				row.print("Resolution"),
-				row.print("Frame Rate"),
-				row.print("Video Codec"),
-				row.print("Audio Bit Depth"),
-				row.print("Audio Sample Rate"),
-				row.print("Audio Codec"),
-			)
-		}
+		// } else {
+		// 	_, probes := probe(in, fileName, true)
+		// 	log.Println(probes,
+		// 		row.print("Resolution"),
+		// 		row.print("Frame Rate"),
+		// 		row.print("Video Codec"),
+		// 		row.print("Audio Bit Depth"),
+		// 		row.print("Audio Sample Rate"),
+		// 		row.print("Audio Codec"),
+		// 	)
+		// }
 	}
 }
 
