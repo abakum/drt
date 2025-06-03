@@ -15,4 +15,4 @@ require (
 	golang.org/x/sys v0.26.0
 )
 
-require github.com/abakum/version v0.1.4-lw // indirect
+require github.com/abakum/version v0.1.4-lw

@@ -215,28 +215,62 @@ func removeFirstNonLatinCyrillic(s string) string {
 	re := regexp.MustCompile(`^[^\p{Latin}\p{Cyrillic}]*`)
 	return re.ReplaceAllString(s, "")
 }
+func removeNonAlphaNumSp(s string) string {
+	re := regexp.MustCompile(`[^\p{Latin}\p{Cyrillic}\p{N} ]`)
+	return re.ReplaceAllString(s, "")
+}
 
 func (t *Tags) write(args1 string) {
+	const ht = "HASHTAGS"
 	t.delEmpty()
 
 	uniq := make(map[string]bool) // отбросим повторения хэштэгов
-	for _, vs := range *t {
+	for key, vs := range *t {
+		switch key {
+		case ht, "DESCRIPTION", taglib.Comment:
+			continue
+		}
 		for _, v := range vs {
-			uniq[v] = true
+			name := removeFirstNonLatinCyrillic(v)
+			if name == "" {
+				// Числа пригодятся
+				switch key {
+				case taglib.MovementName:
+					if len(v) < 2 {
+						uniq["m0"+v] = true
+					} else {
+						uniq["m"+v[:2]] = true
+					}
+				case taglib.TrackNumber:
+					if len(v) < 2 {
+						uniq["t0"+v] = true
+					} else {
+						uniq["t"+v[:2]] = true
+					}
+				case taglib.Date:
+					if len(v) > 3 {
+						uniq["y"+v[:4]] = true
+					}
+					if len(v) > 7 {
+						uniq["d"+v[:8]] = true
+					}
+				}
+			}
+			uniq[name] = true
 		}
 	}
 	var hashTags []string // Список #хэштэгов
 	for k := range uniq {
-		k = removeFirstNonLatinCyrillic(k)
 		if len(k) > 0 {
 			k = strings.Replace(k, "#", "d", -1) // C#m~>Cdm
+			k = removeNonAlphaNumSp(k)           // №1~>1
 			hashTags = append(hashTags, "#"+strings.Replace(k, " ", "_", -1))
 		}
 	}
 	slices.Sort(hashTags) // упорядочим хэштэги
 
 	if len(hashTags) > 0 {
-		t.setVals("HASHTAGS", strings.Join(hashTags, " "))
+		t.setVals(ht, strings.Join(hashTags, " "))
 	}
 
 	for _, key := range []string{"DESCRIPTION", taglib.Comment} {
@@ -450,7 +484,7 @@ func (t *Tags) tGroup(title string) {
 		"синтезаторов": "Синтезатор",
 		"фортепиано":   "Фортепиано",
 		"фортепианным": "Фортепиано",
-		"фортепианое":  "Фортепиано",
+		"фортепианное": "Фортепиано",
 		// Струнные смычковые: Скрипка, альт, виолончель, контрабас
 		"альта":       "Альт",
 		"альтов":      "Альт",
@@ -458,8 +492,8 @@ func (t *Tags) tGroup(title string) {
 		"виолончелей": "Виолончель",
 		"контрабаса":  "Контрабас",
 		"контрабасов": "Контрабас",
-		"cкрипки":     "Скрипка",
-		"cкрипок":     "Скрипка",
+		"скрипки":     "Скрипка",
+		"скрипок":     "Скрипка",
 		// Струнные щипковые:  арфа, балалайка, домра, гитара, лютня, мандолина
 		"арфы":      "Арфа",
 		"арф":       "Арфа",
