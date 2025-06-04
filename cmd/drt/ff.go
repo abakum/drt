@@ -85,6 +85,10 @@ func run(ctx context.Context, writer io.Writer, bin, root string, args ...string
 			return cfg.WithFSConfig(fscfg)
 		},
 	})
+	// Для exec не требуется а после ffmpreg.Run нужен flush
+	if bw, ok := writer.(*bufio.Writer); ok {
+		bw.Flush()
+	}
 	return
 }
 
@@ -143,27 +147,6 @@ func probe(dir, base string, video bool) (audio string, lines []string) {
 				line = fmt.Sprintf(br+"%d kb/s", i/1000)
 			}
 		}
-		// if strings.HasPrefix(line, "codec_name=") {
-		// 	if i > 2 {
-		// 		return
-		// 	}
-		// 	i++
-		// }
-		// if strings.Contains(line, "=0") {
-		// 	continue
-		// }
-		// if strings.Contains(line, "=N/A") {
-		// 	continue
-		// }
-		// if strings.Contains(line, "=unknown") {
-		// 	continue
-		// }
-		// if strings.HasPrefix(line, br) {
-		// 	val := strings.TrimPrefix(line, br)
-		// 	if i, err := strconv.Atoi(val); err == nil {
-		// 		line = fmt.Sprintf(br+"%d kb/s", i/1000)
-		// 	}
-		// }
 		lines = append(lines, line)
 	}
 }

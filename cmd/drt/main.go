@@ -160,7 +160,7 @@ func main() {
 			ffe := filepath.Join(dir, ff)
 			m := "Можно сделать ссылку"
 			if win {
-				log.Printf(`%s 'mklink -h "%s" "%s"'`+"\n", m, ffe, exe)
+				log.Printf(`%s 'mklink /h "%s" "%s"'`+"\n", m, ffe, exe)
 			} else {
 				log.Printf(`%s 'ln "%s" "%s"'`+"\r\n", m, exe, ffe)
 			}
