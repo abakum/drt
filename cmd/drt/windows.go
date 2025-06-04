@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 
+	"github.com/jxeng/shortcut"
 	"golang.org/x/sys/windows"
 )
 
@@ -69,4 +71,70 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 		log.Println("Error write .cmd:", err)
 	}
 	return
+}
+
+func install(oldname string, lnks ...string) {
+	sc := shortcut.Shortcut{
+		// ShortcutPath:     "",
+		Target:       oldname,
+		IconLocation: oldname,
+		// Arguments:        "",
+		Description: "Tagger for DaVinci Resolve",
+		// Hotkey:           "",
+		WindowStyle: "3",
+		// WorkingDirectory: "",
+	}
+	for _, lnk := range lnks {
+		sc.ShortcutPath = lnk
+		log.Println(oldname, "~>", sc.ShortcutPath, shortcut.Create(sc))
+	}
+
+}
+
+type ST struct {
+	userDir  func() (string, error)
+	p, m     string
+	root, dr string
+}
+
+func swap(sts ...ST) {
+	stm := make(map[bool]ST, 2)
+	var err error
+	for i, st := range sts {
+		st.root, err = st.userDir()
+		if err != nil {
+			return
+		}
+		st.dr = filepath.Join(st.root, st.p, drTags+ext)
+		os.Remove(st.dr) // если старая ссылка не на drt то удалится
+		stm[i > 0] = st
+	}
+	i := false
+	f, err := open(stm[!i].dr)
+	if err == nil {
+		f.Close()
+	} else {
+		i = !i
+	}
+	if yes(stm[i].m) {
+		defer ctrlC()
+	} else {
+		i = !i
+	}
+	rename(exe, stm[!i].dr, stm[i].dr)
+}
+
+func rename(exe, s, t string) {
+	f, err := open(s)
+	if err == nil {
+		f.Close()
+		log.Println(s, "~>", t, os.Rename(s, t))
+	} else {
+		f, err = open(t)
+		if err != nil {
+			log.Println(exe, "->", t, mkLink(exe, t, true, true))
+		} else {
+			f.Close()
+		}
+	}
 }

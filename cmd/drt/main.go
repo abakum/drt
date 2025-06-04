@@ -38,7 +38,6 @@ import (
 
 	version "github.com/abakum/version/lib"
 	"github.com/adrg/xdg"
-	"github.com/jxeng/shortcut"
 	"github.com/xlab/closer"
 	"golang.org/x/text/encoding/unicode"
 )
@@ -427,20 +426,7 @@ Artist=Иван Петров
 			}
 			return
 		}
-		sc := shortcut.Shortcut{
-			// ShortcutPath:     "",
-			Target:       oldname,
-			IconLocation: oldname,
-			// Arguments:        "",
-			Description: "Tagger for DaVinci Resolve",
-			// Hotkey:           "",
-			WindowStyle: "3",
-			// WorkingDirectory: "",
-		}
-		for _, lnk := range lnks {
-			sc.ShortcutPath = lnk
-			log.Println(oldname, "~>", sc.ShortcutPath, shortcut.Create(sc))
-		}
+		install(oldname, lnks...)
 
 		// swap(ST{os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования", "", ""},
 		// ST{os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить", "", ""})
@@ -478,54 +464,39 @@ Artist=Иван Петров
 			// log.Println(link, "~> /dev/null", os.Remove(link))
 			return
 		}
-		// install
-		if f, err = open(link); err == nil {
-			f.Close()
-		} else {
-			mkLink(oldname, link, true, true)
-		}
+		install(oldname, desktop, sh, link, application, local, xdgDesktopIcon, verb)
+		// 		if f, err = open(link); err == nil {
+		// 			f.Close()
+		// 		} else {
+		// 			mkLink(oldname, link, true, true)
+		// 		}
 
-		ex := drTags
-		if _, err := exec.LookPath(ex); err != nil {
-			//Если не в путёвом
-			ex = link
-		}
+		// 		ex := drTags
+		// 		if _, err := exec.LookPath(ex); err != nil {
+		// 			//Если не в путёвом
+		// 			ex = link
+		// 		}
 
-		log.Println("Создаю меню для nautilus", sh,
-			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/bin/bash
-gnome-terminal --title %s -- %s`, drTags, drTags)), 0744))
-		deskTop(desktop, ex)
-		cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+application) //
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		log.Println(cmd.Args, cmd.Run())
-		if f, err = open(local); err == nil {
-			f.Close()
-		} else {
-			deskTop(local, ex)
-		}
-		cmd = exec.CommandContext(ctx, xdgDesktopIcon, verb, "--novendor", local)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		log.Println(cmd.Args, cmd.Run())
+		// 		log.Println("Создаю меню для nautilus", sh,
+		// 			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/bin/bash
+		// gnome-terminal --title %s -- %s`, drTags, drTags)), 0744))
+		// 		deskTop(desktop, ex)
+		// 		cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+application) //
+		// 		cmd.Stdin = os.Stdin
+		// 		cmd.Stdout = os.Stdout
+		// 		cmd.Stderr = os.Stderr
+		// 		log.Println(cmd.Args, cmd.Run())
+		// 		if f, err = open(local); err == nil {
+		// 			f.Close()
+		// 		} else {
+		// 			deskTop(local, ex)
+		// 		}
+		// 		cmd = exec.CommandContext(ctx, xdgDesktopIcon, verb, "--novendor", local)
+		// 		cmd.Stdin = os.Stdin
+		// 		cmd.Stdout = os.Stdout
+		// 		cmd.Stderr = os.Stderr
+		// 		log.Println(cmd.Args, cmd.Run())
 	}
-}
-
-func deskTop(desktop, ex string) {
-	log.Println("Создаю ярлык", desktop,
-		os.WriteFile(desktop, []byte(`[Desktop Entry]
-Name=drTags
-Type=Application
-Exec=`+ex+` %F
-Terminal=true
-Icon=edit-find-replace
-NoDisplay=false
-MimeType=text/csv;audio/mpeg;audio/flac;audio/mp4;video/mp4;video/quicktime;
-Categories=AudioVideo;AudioVideoEditing;
-Keywords=media info;metadata;tag;video;audio;codec;csv;mp3;flac;m4a;mp4;mov;davinci;resolve
-`), 0644))
 }
 
 func yes(s string) (ok bool) {
@@ -541,54 +512,6 @@ func yes(s string) (ok bool) {
 		return true
 	}
 	return
-}
-
-type ST struct {
-	userDir  func() (string, error)
-	p, m     string
-	root, dr string
-}
-
-func swap(sts ...ST) {
-	stm := make(map[bool]ST, 2)
-	var err error
-	for i, st := range sts {
-		st.root, err = st.userDir()
-		if err != nil {
-			return
-		}
-		st.dr = filepath.Join(st.root, st.p, drTags+ext)
-		os.Remove(st.dr) // если старая ссылка не на drt то удалится
-		stm[i > 0] = st
-	}
-	i := false
-	f, err := open(stm[!i].dr)
-	if err == nil {
-		f.Close()
-	} else {
-		i = !i
-	}
-	if yes(stm[i].m) {
-		defer ctrlC()
-	} else {
-		i = !i
-	}
-	rename(exe, stm[!i].dr, stm[i].dr)
-}
-
-func rename(exe, s, t string) {
-	f, err := open(s)
-	if err == nil {
-		f.Close()
-		log.Println(s, "~>", t, os.Rename(s, t))
-	} else {
-		f, err = open(t)
-		if err != nil {
-			log.Println(exe, "->", t, mkLink(exe, t, true, true))
-		} else {
-			f.Close()
-		}
-	}
 }
 
 func ctrlC() {

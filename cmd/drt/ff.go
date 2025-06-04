@@ -68,7 +68,7 @@ func run(ctx context.Context, writer io.Writer, bin, root string, args ...string
 	rc, err = ffmpreg.Run(ctx, wasm.Args{
 		Name:   bin,
 		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
+		Stdout: writer,
 		Stderr: os.Stderr,
 		Args:   args,
 		Config: func(cfg wazero.ModuleConfig) wazero.ModuleConfig {
