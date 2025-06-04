@@ -16,3 +16,8 @@ require (
 )
 
 require github.com/abakum/version v0.1.4-lw
+
+require (
+	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/jxeng/shortcut v1.0.2 // indirect
+)

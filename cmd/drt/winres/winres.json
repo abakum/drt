@@ -2,12 +2,10 @@
   "RT_GROUP_ICON": {
     "APP": {
       "0000": [
-        "icon_00000.png",
-        "icon_00001.png",
-        "icon_00002.png",
-        "icon_00003.png",
-        "icon_00004.png",
-        "icon_00005.png"
+        "edit-find-replace256f.png",
+        "edit-find-replace48f.png",
+        "edit-find-replace32f.png",
+        "edit-find-replace16f.png"
       ]
     }
   },
@@ -50,9 +48,9 @@
             "FileDescription": "Tagger for DaVinci Resolve",
             "FileVersion": "",
             "InternalName": "",
-            "LegalCopyright": "Abakum",
+            "LegalCopyright": "© Abakum",
             "LegalTrademarks": "",
-            "OriginalFilename": "drt",
+            "OriginalFilename": "drt.exe",
             "PrivateBuild": "",
             "ProductName": "drTags",
             "ProductVersion": "",
@@ -64,9 +62,9 @@
             "FileDescription": "Тэггер для DaVinci Resolve",
             "FileVersion": "",
             "InternalName": "",
-            "LegalCopyright": "Абакум",
+            "LegalCopyright": "© Абакум",
             "LegalTrademarks": "",
-            "OriginalFilename": "drt",
+            "OriginalFilename": "drt.exe",
             "PrivateBuild": "",
             "ProductName": "drTags",
             "ProductVersion": "",

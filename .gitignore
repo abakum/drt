@@ -25,7 +25,3 @@ go.work.sum
 .env
 
 old/
-
-dist/tmp/
-dist/darwin_amd64/drt.app/
-dist/darwin_arm64/drt.app/

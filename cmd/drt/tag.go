@@ -221,13 +221,17 @@ func removeNonAlphaNumSp(s string) string {
 }
 
 func (t *Tags) write(args1 string) {
-	const ht = "HASHTAGS"
+	const (
+		ht = "HASHTAGS"
+		ec = "ENCODER"
+		ds = "DESCRIPTION"
+	)
 	t.delEmpty()
 
 	uniq := make(map[string]bool) // отбросим повторения хэштэгов
 	for key, vs := range *t {
 		switch key {
-		case ht, "DESCRIPTION", taglib.Comment:
+		case ht, ec, ds, taglib.Comment:
 			continue
 		}
 		for _, v := range vs {
@@ -255,6 +259,7 @@ func (t *Tags) write(args1 string) {
 						uniq["d"+v[:8]] = true
 					}
 				}
+				continue
 			}
 			uniq[name] = true
 		}
@@ -273,15 +278,15 @@ func (t *Tags) write(args1 string) {
 		t.setVals(ht, strings.Join(hashTags, " "))
 	}
 
-	for _, key := range []string{"DESCRIPTION", taglib.Comment} {
+	for _, key := range []string{ds, taglib.Comment} {
 		vals, ok := t.vals(key)
 		if ok {
 			t.setVals(key, strings.Join(vals, "\n"))
 		}
 	}
 
-	if _, ok := t.vals("ENCODER"); ok {
-		t.setVals("ENCODER", "drTags")
+	if _, ok := t.vals(ec); ok {
+		t.setVals(ec, "drTags")
 	}
 
 	// t.print(3, "Пишу тэги в "+args1, false)

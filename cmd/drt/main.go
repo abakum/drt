@@ -18,7 +18,7 @@ package main
 //go-winres init
 //go get github.com/abakum/version
 //go generate
-//icon c:\Windows\System32\imageres.dll@5332
+//ie4uinit.exe -show
 
 import (
 	"bufio"
@@ -38,6 +38,7 @@ import (
 
 	version "github.com/abakum/version/lib"
 	"github.com/adrg/xdg"
+	"github.com/jxeng/shortcut"
 	"github.com/xlab/closer"
 	"golang.org/x/text/encoding/unicode"
 )
@@ -91,7 +92,8 @@ func main() {
 			log.Fatalf("Где я? %v", err)
 		}
 	}
-	log.Println(exe, VERSION)
+	wd, _ := os.Getwd()
+	log.Println(exe, VERSION, wd)
 
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()
@@ -395,29 +397,60 @@ Artist=Иван Петров
 Расширенно про mp3 https://id3.org/id3v2.3.0
 Страничка drTags https://github.com/abakum/drt
 `)
+	dr := drTags + ".desktop"
+	if win {
+		dr = drTags + ".lnk"
+	}
+	desktop := filepath.Join(xdg.UserDirs.Desktop, dr)
+	verb := "install"
+	f, err := open(desktop)
+	if err == nil {
+		f.Close()
+		verb = "uninstall"
+	}
+	if !yes(verb + " " + drTags) {
+		return
+	}
+	defer ctrlC()
+	oldname := filepath.Join(dir, drt) + ext
+
 	switch runtime.GOOS {
 	case "windows":
-		swap(ST{os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования", "", ""},
-			ST{os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить", "", ""})
+		lnks := []string{
+			desktop,
+			filepath.Join(xdg.DataDirs[0], `Microsoft\Windows\SendTo`, dr),
+			filepath.Join(xdg.DataDirs[0], `Microsoft\Windows\Start Menu\Programs`, dr),
+		}
+		if verb == "uninstall" {
+			for _, lnk := range lnks {
+				log.Println(lnk, "~> nul", os.Remove(lnk))
+			}
+			return
+		}
+		sc := shortcut.Shortcut{
+			// ShortcutPath:     "",
+			Target:       oldname,
+			IconLocation: oldname,
+			// Arguments:        "",
+			Description: "Tagger for DaVinci Resolve",
+			// Hotkey:           "",
+			WindowStyle: "3",
+			// WorkingDirectory: "",
+		}
+		for _, lnk := range lnks {
+			sc.ShortcutPath = lnk
+			log.Println(oldname, "~>", sc.ShortcutPath, shortcut.Create(sc))
+		}
+
+		// swap(ST{os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования", "", ""},
+		// ST{os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить", "", ""})
 	case "linux":
-		dr := drTags + ".desktop"
+		link := filepath.Join(dir, drTags)
 		sh := filepath.Join(xdg.DataHome, "nautilus/scripts", drTags)
-		hard := filepath.Join(dir, drTags)
-		desktop := path.Join(xdg.UserDirs.Desktop, dr)
-		f, err := open(desktop)
 		xdgDesktopIcon := "xdg-desktop-icon"
 
 		application := path.Join(xdg.DataHome, "application")
 		local := path.Join(application, dr)
-		verb := "install"
-		if err == nil {
-			f.Close()
-			verb = "uninstall"
-		}
-		if !yes(verb + " " + drTags) {
-			return
-		}
-		defer ctrlC()
 		if verb == "uninstall" {
 			cmd := exec.CommandContext(ctx, xdgDesktopIcon, verb, desktop)
 			cmd.Stdin = os.Stdin
@@ -429,7 +462,10 @@ Artist=Иван Петров
 				log.Println(desktop, "~> /dev/null", os.Remove(desktop))
 			}
 
-			log.Println(local, "~> /dev/null", os.Remove(local))
+			// log.Println(local, "~> /dev/null", os.Remove(local))
+			for _, lnk := range []string{local, sh, link} {
+				log.Println(lnk, "~> /dev/null", os.Remove(lnk))
+			}
 
 			cmd = exec.CommandContext(ctx, "update-desktop-database", application)
 			cmd.Stdin = os.Stdin
@@ -437,22 +473,22 @@ Artist=Иван Петров
 			cmd.Stderr = os.Stderr
 			log.Println(cmd.Args, cmd.Run())
 
-			log.Println(sh, "~> /dev/null", os.Remove(sh))
+			// log.Println(sh, "~> /dev/null", os.Remove(sh))
 
-			log.Println(hard, "~> /dev/null", os.Remove(hard))
+			// log.Println(link, "~> /dev/null", os.Remove(link))
 			return
 		}
 		// install
-		if f, err = open(hard); err == nil {
+		if f, err = open(link); err == nil {
 			f.Close()
 		} else {
-			mkLink(filepath.Join(dir, drt), hard, true, true)
+			mkLink(oldname, link, true, true)
 		}
 
 		ex := drTags
 		if _, err := exec.LookPath(ex); err != nil {
 			//Если не в путёвом
-			ex = hard
+			ex = link
 		}
 
 		log.Println("Создаю меню для nautilus", sh,
@@ -556,7 +592,11 @@ func rename(exe, s, t string) {
 }
 
 func ctrlC() {
-	if args0 != drTags {
+	gui := args0 == drTags
+	if win {
+		gui = !strings.HasPrefix(os.Environ()[0], "=")
+	}
+	if !gui {
 		return
 	}
 	log.Println("Жми ^C")
