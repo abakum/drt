@@ -53,7 +53,7 @@ var (
 	argsTags bool // Тэги в командной строке
 	win      = runtime.GOOS == "windows"
 	// a/b.c
-	args0 = filepath.Base(os.Args[0])
+	args0 = trimExt(filepath.Base(os.Args[0]))
 	// b.c
 	exe,
 	dir,
@@ -72,8 +72,6 @@ var _ = version.Ver
 var VERSION string
 
 func main() {
-	args0 = trimExt(args0)
-	// b
 	var (
 		rc   uint32
 		file string
@@ -81,6 +79,7 @@ func main() {
 	)
 
 	log.SetFlags(log.Lshortfile)
+
 	exe, err = os.Executable()
 	if err != nil {
 		if lp, err := exec.LookPath(args0); err == nil {
@@ -421,15 +420,10 @@ Artist=Иван Петров
 			filepath.Join(xdg.DataDirs[0], `Microsoft\Windows\Start Menu\Programs`, dr),
 		}
 		if verb == "uninstall" {
-			for _, lnk := range lnks {
-				log.Println(lnk, "~> nul", os.Remove(lnk))
-			}
+			install("", lnks...)
 			return
 		}
 		install(oldname, lnks...)
-
-		// swap(ST{os.UserHomeDir, "Desktop", "Переместить drTags на рабочий стол чтоб на него можно было бросать файлы для тэггирования", "", ""},
-		// ST{os.UserConfigDir, `Microsoft\Windows\SendTo`, "Переместить drTags в меню Отправить", "", ""})
 	case "linux":
 		link := filepath.Join(dir, drTags)
 		sh := filepath.Join(xdg.DataHome, "nautilus/scripts", drTags)
@@ -459,43 +453,9 @@ Artist=Иван Петров
 			cmd.Stderr = os.Stderr
 			log.Println(cmd.Args, cmd.Run())
 
-			// log.Println(sh, "~> /dev/null", os.Remove(sh))
-
-			// log.Println(link, "~> /dev/null", os.Remove(link))
 			return
 		}
 		install(oldname, desktop, sh, link, application, local, xdgDesktopIcon, verb)
-		// 		if f, err = open(link); err == nil {
-		// 			f.Close()
-		// 		} else {
-		// 			mkLink(oldname, link, true, true)
-		// 		}
-
-		// 		ex := drTags
-		// 		if _, err := exec.LookPath(ex); err != nil {
-		// 			//Если не в путёвом
-		// 			ex = link
-		// 		}
-
-		// 		log.Println("Создаю меню для nautilus", sh,
-		// 			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/bin/bash
-		// gnome-terminal --title %s -- %s`, drTags, drTags)), 0744))
-		// 		deskTop(desktop, ex)
-		// 		cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+application) //
-		// 		cmd.Stdin = os.Stdin
-		// 		cmd.Stdout = os.Stdout
-		// 		cmd.Stderr = os.Stderr
-		// 		log.Println(cmd.Args, cmd.Run())
-		// 		if f, err = open(local); err == nil {
-		// 			f.Close()
-		// 		} else {
-		// 			deskTop(local, ex)
-		// 		}
-		// 		cmd = exec.CommandContext(ctx, xdgDesktopIcon, verb, "--novendor", local)
-		// 		cmd.Stdin = os.Stdin
-		// 		cmd.Stdout = os.Stdout
-		// 		cmd.Stderr = os.Stderr
-		// 		log.Println(cmd.Args, cmd.Run())
 	}
 }
 
@@ -515,7 +475,7 @@ func yes(s string) (ok bool) {
 }
 
 func ctrlC() {
-	gui := args0 == drTags
+	gui := trimExt(filepath.Base(exe)) == drTags
 	if win {
 		gui = !strings.HasPrefix(os.Environ()[0], "=")
 	}
@@ -534,11 +494,12 @@ func drCSV(album, out, args1 string) {
 	}
 	defer f.Close()
 
-	// Читаем заголовок metadata.csv UTF-16 LE BOM
-	utf := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)
-	nr := csv.NewReader(utf.NewDecoder().Reader(f))
+	// Читаем .csv с UTF-16 LE BOM
+	encoding := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)
+	decoder := encoding.NewDecoder()
+	reader := csv.NewReader(decoder.Reader(f))
 	i := 0
-	vals, err := nr.Read()
+	vals, err := reader.Read()
 	i++
 	if err != nil {
 		log.Fatalln("Ошибка разбора заголовка", err, vals)
@@ -549,7 +510,7 @@ func drCSV(album, out, args1 string) {
 	//Читаем остальные строки metadata.csv
 	for {
 		var err error
-		row.vals, err = nr.Read()
+		row.vals, err = reader.Read()
 		i++
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -603,6 +564,17 @@ func drCSV(album, out, args1 string) {
 	}
 }
 
-func trimExt(args0 string) string {
-	return strings.TrimSuffix(args0, filepath.Ext(args0))
+func trimExt(path string) string {
+	return strings.TrimSuffix(path, filepath.Ext(path))
+}
+
+func qq(exe string) (path string) {
+	// a\b
+	path = fmt.Sprintf("%q", exe)
+	// "a\\b"
+	path = strings.Trim(path, `"`)
+	// a\\b
+	path = `\"` + path + `\"`
+	// \"a\\b\"
+	return
 }

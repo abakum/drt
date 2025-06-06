@@ -34,6 +34,7 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 	}
 	return
 }
+
 func install(oldname string, lnks ...string) {
 	desktop, sh, link, application, local, xdgDesktopIcon, verb := lnks[0], lnks[1], lnks[2], lnks[3], lnks[4], lnks[5], lnks[6]
 	if f, err := open(link); err == nil {
