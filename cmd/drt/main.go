@@ -60,8 +60,9 @@ var (
 	// a
 	ext string
 	// .c
-	sources = make(map[string]*ATT) // Файлы источники
-	etc     = []string{}            // Тэги
+	sources = make(map[string]*ATT)   // Файлы источники
+	etc     = []string{}              // Тэги
+	audios  = make(map[string]string) // Аудиофайлы
 )
 
 var _ = version.Ver
@@ -211,15 +212,18 @@ func main() {
 	}
 	argsTags = strings.Contains(strings.Join(etc, " "), "=")
 
-	for file, source := range sources {
+	// Нельзя делать цикл по sources так как drCSV вызывает timeLine который добавляет в sources
+	for _, file := range mapKeys(sources) {
+		source := sources[file]
 		out, album, ext, title := oaet(file)
 		if ext == ".csv" {
 			drCSV(album, out, file)
 			continue
 		}
 
-		_, probes := probe(filepath.Dir(file), filepath.Base(file), false)
+		a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
 		fmt.Println(append(probes, probeA(file, true)...))
+		audios[file] = a
 
 		source.album = album
 		source.title = title
@@ -246,6 +250,17 @@ func main() {
 	}
 	r := bufio.NewReader(os.Stdin)
 	for {
+		for _, file := range append(mapKeys(sources), mapKeys(results)...) {
+			e := Ext(file)
+			if e == ".csv" {
+				continue
+			}
+			if att := sources[file]; att != nil {
+				log.Println(e, att.tags[HT])
+			} else if att := results[file]; att != nil {
+				log.Println(e, att.tags[HT])
+			}
+		}
 		fmt.Println("Пустая строка завершает ввод записью, ^С отменяет ввод. Введи тэг=значение:")
 		etc = nil
 		for {
@@ -265,13 +280,10 @@ func main() {
 		if _, ok := tags["=="]; ok {
 			delete(tags, "==")
 			// Нельзя делать цикл по sources так как timeLine добавляет в sources
-			files := []string{} // Список файлов
-			for file := range sources {
-				files = append(files, file)
-			}
-			for _, file := range files {
+			for _, file := range mapKeys(sources) {
 				a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
 				fmt.Println(append(probes, probeA(file, true)...))
+				audios[file] = a
 				source := sources[file]
 				source.tags.set("", tags)
 				source.tags.write(file)
@@ -280,22 +292,20 @@ func main() {
 				source.tags.timeLine(source.album, filepath.Dir(file), file, a)
 			}
 		}
+		log.Println("Исходные медиафайлы")
 		for file, att := range sources {
-			_, _, ext, _ := oaet(file)
-			if ext == ".csv" {
-				// drCSV(album, out, file)
-				continue
-			}
 			if Ext(file) == ".csv" {
 				continue
 			}
 			swrpp(file, att, tags)
 		}
+		log.Println("Результирующие медиафайлы")
 		for file, att := range results {
 			swrpp(file, att, tags)
 		}
 	}
 }
+
 func swrpp(file string, att *ATT, tags Tags) {
 	att.tags.set("", tags)
 	att.tags.write(file)
@@ -303,6 +313,16 @@ func swrpp(file string, att *ATT, tags Tags) {
 	att.tags = readTags(file)
 	att.tags.print(2, file, false)
 	att.tags.parse(att.album, att.title)
+}
+
+func mapKeys(m map[string]*ATT) (keys []string) {
+	for k, v := range m {
+		if v == nil {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	return
 }
 
 func Ext(path string) string {

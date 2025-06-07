@@ -16,6 +16,12 @@ import (
 	"github.com/abakum/go-taglib"
 )
 
+const (
+	HT = "HASHTAGS"
+	EC = "ENCODER"
+	DS = "DESCRIPTION"
+)
+
 type Tags map[string][]string
 
 // Выведем t с title.
@@ -29,6 +35,9 @@ func (t Tags) print(calldepth int, title string, slash bool) {
 	}
 	keys := []string{}
 	for k := range t {
+		if k == HT {
+			continue
+		}
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
@@ -221,17 +230,12 @@ func removeNonAlphaNumSp(s string) string {
 }
 
 func (t *Tags) write(args1 string) {
-	const (
-		ht = "HASHTAGS"
-		ec = "ENCODER"
-		ds = "DESCRIPTION"
-	)
 	t.delEmpty()
-
 	uniq := make(map[string]bool) // отбросим повторения хэштэгов
+	uniq["LL"] = LL(args1)
 	for key, vs := range *t {
 		switch key {
-		case ht, ec, ds, taglib.Comment:
+		case HT, EC, DS, taglib.Comment:
 			continue
 		}
 		for _, v := range vs {
@@ -264,29 +268,31 @@ func (t *Tags) write(args1 string) {
 			uniq[name] = true
 		}
 	}
+
 	var hashTags []string // Список #хэштэгов
-	for k := range uniq {
-		if len(k) > 0 {
+	for k, ok := range uniq {
+		if ok && len(k) > 0 {
 			k = strings.Replace(k, "#", "d", -1) // C#m~>Cdm
 			k = removeNonAlphaNumSp(k)           // №1~>1
 			hashTags = append(hashTags, "#"+strings.Replace(k, " ", "_", -1))
 		}
 	}
+
 	slices.Sort(hashTags) // упорядочим хэштэги
 
 	if len(hashTags) > 0 {
-		t.setVals(ht, strings.Join(hashTags, " "))
+		t.setVals(HT, strings.Join(hashTags, " "))
 	}
 
-	for _, key := range []string{ds, taglib.Comment} {
+	for _, key := range []string{DS, taglib.Comment} {
 		vals, ok := t.vals(key)
 		if ok {
 			t.setVals(key, strings.Join(vals, "\n"))
 		}
 	}
 
-	if _, ok := t.vals(ec); ok {
-		t.setVals(ec, "drTags")
+	if _, ok := t.vals(EC); ok {
+		t.setVals(EC, "drTags")
 	}
 
 	// t.print(3, "Пишу тэги в "+args1, false)
@@ -712,6 +718,28 @@ func (t *Tags) parse(album, file string) {
 	title = tags.tMovement(title)
 	t.kvv(taglib.Title, &title, &tags)
 	t.add(ts, tags)
+}
+
+func LL(file string) (ok bool) {
+	ft := audios[file]
+	if ft == "" {
+		switch Ext(file) {
+		case ".wav", ".flac", ".ape", ".wv", ".dsf", ".dff", ".tak", ".tta", ".ofr":
+			return true
+		}
+		return
+	}
+	switch ft {
+	case "flac", "alac", "ape", "wavpack", "dsd_lsbf":
+		return true
+	case "aac", "mp3":
+		return
+	default:
+		if strings.HasPrefix(ft, "pcm_") {
+			return true
+		}
+	}
+	return
 }
 
 func (t *Tags) csv(file string, row *Row, keys ...string) {

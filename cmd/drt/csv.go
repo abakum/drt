@@ -102,9 +102,8 @@ func (t *Tags) timeLine(album, in, title, a string) {
 		var probes []string
 		a, probes = probe(in, base, false)
 		fmt.Println(append(probes, probeA(res.Name(), true)...))
-		sources[res.Name()] = &ATT{album, title, *t}
+		audios[res.Name()] = a
 	}
-	// lpcm := !strings.HasSuffix(res.Name(), alac) && !strings.HasSuffix(res.Name(), mp4)
 	lpcm := false
 	xlac := false
 	outs := []string{res.Name()}
@@ -169,7 +168,7 @@ func (t *Tags) timeLine(album, in, title, a string) {
 	}
 
 	if timeline {
-		t.print(2, "TimeLine "+title, false)
+		t.print(2, title+".csv", false)
 	}
 	t.parse(album, title)
 	if argsTags {
@@ -181,16 +180,23 @@ func (t *Tags) timeLine(album, in, title, a string) {
 		if err == nil {
 			if i > 0 {
 				// Кроме исходного
-				_, probes := probe(filepath.Dir(args1), filepath.Base(args1), false)
+				a, probes := probe(filepath.Dir(args1), filepath.Base(args1), false)
 				fmt.Println(append(probes, probeA(res.Name(), true)...))
+				audios[args1] = a
 			}
-			if argsTags {
-				t.write(args1)
-				readTags(args1).print(2, args1, false)
-			} else {
-				// Пригодится после консольного ввода тэгов
-				if _, ok := results[args1]; !ok && i > 0 {
-					// Кроме исходного
+			t.write(args1)
+			readTags(args1).print(2, args1, false)
+			switch {
+			case argsTags:
+				// Для тегов из командной строки ничего не сохраняем в sources/results
+
+			case timeline && i == 0:
+				// Для временной шкалы и первого файла (исходника)
+				sources[args1] = &ATT{album, title, *t}
+
+			case i > 0:
+				if _, exists := results[args1]; !exists {
+					// Если результата нет в results
 					results[args1] = &ATT{album, title, *t}
 				}
 			}
