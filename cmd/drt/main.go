@@ -34,6 +34,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	version "github.com/abakum/version/lib"
@@ -60,9 +61,8 @@ var (
 	// a
 	ext string
 	// .c
-	sources = make(map[string]*ATT)   // Файлы источники
-	etc     = []string{}              // Тэги
-	audios  = make(map[string]string) // Аудиофайлы
+	sources = make(map[string]*ATT) // Файлы источники и результатов
+	etc     = []string{}            // Тэги
 )
 
 var _ = version.Ver
@@ -213,7 +213,8 @@ func main() {
 	argsTags = strings.Contains(strings.Join(etc, " "), "=")
 
 	// Нельзя делать цикл по sources так как drCSV вызывает timeLine который добавляет в sources
-	for _, file := range mapKeys(sources) {
+	for _, file := range mapKeys(sources, false) {
+		// Только источники
 		source := sources[file]
 		out, album, ext, title := oaet(file)
 		if ext == ".csv" {
@@ -223,12 +224,40 @@ func main() {
 
 		a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
 		fmt.Println(append(probes, probeA(file, true)...))
-		audios[file] = a
+		if slices.Contains(probes, "format_name=mpegts") && Ext(file) != ".mts" {
+			mov := file + ".mov"
+			if f, err := open(mov); err == nil {
+				f.Close()
+				sources[mov] = sources[file]
+				delete(sources, file)
+				file = mov
+				a, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+			} else {
+				args := []string{
+					"-hide_banner",
+					"-v", "error",
+					"-i", filepath.Base(file),
+					"-c", "copy", mov,
+				}
+				rs, err := run(ctx, os.Stdout, "ffmpeg", filepath.Dir(file), args...)
+				if err == nil && rs == 0 {
+					log.Println(file, "~>", mov)
+					sources[mov] = sources[file]
+					delete(sources, file)
+					file = mov
+					a, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+				} else {
+					log.Println("Не удалось создать файл", mov, err, "код завершения", rs)
+				}
+			}
+		}
+		fmt.Println(append(probes, probeA(file, true)...))
 
 		source.album = album
 		source.title = title
 		source.tags = readTags(file)
 		source.tags.print(2, file, false)
+		source.audio = a
 
 		source.tags.parse(album, title)
 
@@ -245,20 +274,30 @@ func main() {
 		return
 	}
 	// drt file
-	for file, result := range results {
-		result.tags.print(2, file, true)
+	log.Println("Исходные медиафайлы------------------------------")
+	for _, file := range mapKeys(sources, false) {
+		if Ext(file) == ".csv" {
+			continue
+		}
+		sources[file].tags.print(2, file, true)
+	}
+	results := mapKeys(sources, true)
+	if len(results) > 0 {
+		log.Println("Результирующие медиафайлы------------------------")
+		for _, file := range results {
+			sources[file].tags.print(2, file, true)
+		}
 	}
 	r := bufio.NewReader(os.Stdin)
 	for {
-		for _, file := range append(mapKeys(sources), mapKeys(results)...) {
+		// Выводим хэштэги
+		for _, file := range mapKeys(sources) {
 			e := Ext(file)
 			if e == ".csv" {
 				continue
 			}
-			if att := sources[file]; att != nil {
-				log.Println(e, att.tags[HT])
-			} else if att := results[file]; att != nil {
-				log.Println(e, att.tags[HT])
+			if ht := sources[file].tags[HT]; len(ht) > 0 {
+				log.Println(e, ht[0])
 			}
 		}
 		fmt.Println("Пустая строка завершает ввод записью, ^С отменяет ввод. Введи тэг=значение:")
@@ -280,11 +319,11 @@ func main() {
 		if _, ok := tags["=="]; ok {
 			delete(tags, "==")
 			// Нельзя делать цикл по sources так как timeLine добавляет в sources
-			for _, file := range mapKeys(sources) {
+			for _, file := range mapKeys(sources, false) {
+				source := sources[file]
 				a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
 				fmt.Println(append(probes, probeA(file, true)...))
-				audios[file] = a
-				source := sources[file]
+				source.audio = a
 				source.tags.set("", tags)
 				source.tags.write(file)
 				source.tags = readTags(file)
@@ -292,16 +331,19 @@ func main() {
 				source.tags.timeLine(source.album, filepath.Dir(file), file, a)
 			}
 		}
-		log.Println("Исходные медиафайлы")
-		for file, att := range sources {
+		log.Println("Исходные медиафайлы------------------------------")
+		for _, file := range mapKeys(sources, false) {
 			if Ext(file) == ".csv" {
 				continue
 			}
-			swrpp(file, att, tags)
+			swrpp(file, sources[file], tags)
 		}
-		log.Println("Результирующие медиафайлы")
-		for file, att := range results {
-			swrpp(file, att, tags)
+		results := mapKeys(sources, true)
+		if len(results) > 0 {
+			log.Println("Результирующие медиафайлы------------------------")
+			for _, file := range results {
+				swrpp(file, sources[file], tags)
+			}
 		}
 	}
 }
@@ -315,13 +357,20 @@ func swrpp(file string, att *ATT, tags Tags) {
 	att.tags.parse(att.album, att.title)
 }
 
-func mapKeys(m map[string]*ATT) (keys []string) {
+// Упорядочим цикл по m
+func mapKeys(m map[string]*ATT, out ...bool) (keys []string) {
 	for k, v := range m {
 		if v == nil {
 			continue
 		}
+		if len(out) > 0 {
+			if out[0] != v.out {
+				continue
+			}
+		}
 		keys = append(keys, k)
 	}
+	slices.Sort(keys)
 	return
 }
 

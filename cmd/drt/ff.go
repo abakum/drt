@@ -104,7 +104,10 @@ func probe(dir, base string, video bool) (audio string, lines []string) {
 		)
 	}
 	args = append(args,
+		"-show_entries", "format=format_name",
 		"-show_entries", "stream=codec_name,bit_rate,sample_fmt,width,height,r_frame_rate,profile,level",
+	)
+	args = append(args,
 		"-of", "default=noprint_wrappers=1",
 		base,
 	)
@@ -117,36 +120,40 @@ func probe(dir, base string, video bool) (audio string, lines []string) {
 	}
 	br := "bit_rate="
 	i := 1
-	for {
-		line, err := spy.ReadString('\n')
-		if err != nil {
-			return
+	has := make(map[string]bool)
+	for _, field := range strings.Fields(spy.String()) {
+		if has[field] {
+			continue
 		}
-		line = strings.TrimSpace(line)
+		has[field] = true
 		switch {
-		case strings.HasPrefix(line, "codec_name="):
+		case strings.HasPrefix(field, "codec_name="):
 			switch i {
 			case 1:
 				//Видео
+				audio = strings.Split(field, "=")[1]
 			case 2:
 				//Аудио
-				audio = strings.Split(line, "=")[1]
+				audio = strings.Split(field, "=")[1]
 			default:
-				return
+				if !strings.HasPrefix(field, "format_name=") {
+					continue
+				}
 			}
 			i++
-		case strings.Contains(line, "=0"):
+		case strings.Contains(field, "=0"):
 			continue
-		case strings.Contains(line, "=N/A"):
+		case strings.Contains(field, "=N/A"):
 			continue
-		case strings.Contains(line, "=unknown"):
+		case strings.Contains(field, "=unknown"):
 			continue
-		case strings.HasPrefix(line, br):
-			val := strings.TrimPrefix(line, br)
+		case strings.HasPrefix(field, br):
+			val := strings.TrimPrefix(field, br)
 			if i, err := strconv.Atoi(val); err == nil {
-				line = fmt.Sprintf(br+"%d kb/s", i/1000)
+				field = fmt.Sprintf(br+"%d kb/s", i/1000)
 			}
 		}
-		lines = append(lines, line)
+		lines = append(lines, field)
 	}
+	return
 }

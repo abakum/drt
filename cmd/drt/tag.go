@@ -669,13 +669,15 @@ func (t *Tags) parse(album, file string) {
 	tags := newTags()
 	t.kvv(taglib.Album, &album, &tags)
 	if _, ok := t.vals(taglib.Date); !ok {
-		date := strings.Fields(album)[0]
-		if _, err := strconv.Atoi(date); err == nil {
-			if len(date) > 7 {
-				// t.setVals(taglib.Date, date[:4], date[:8])
-				tags.setVals(taglib.Date, date[:8])
-			} else {
-				tags.setVals(taglib.Date, date[:4])
+		Fields := strings.Fields(album)
+		if len(Fields) > 0 {
+			date := Fields[0]
+			if _, err := strconv.Atoi(date); err == nil {
+				if len(date) > 7 {
+					tags.setVals(taglib.Date, date[:8])
+				} else {
+					tags.setVals(taglib.Date, date[:4])
+				}
 			}
 		}
 	}
@@ -691,21 +693,27 @@ func (t *Tags) parse(album, file string) {
 	title = strings.TrimSpace(title)
 
 	//01 Моцарт Соната для фортепиано 9 pе мажор
-	tracknumber := strings.Fields(title)[0]
-	if _, err := strconv.Atoi(tracknumber); err == nil {
-		title = strings.TrimPrefix(title, tracknumber)
-		title = strings.TrimSpace(title)
-		//Моцарт Соната для фортепиано 9 pе мажор
-		if _, ok := t.vals(taglib.TrackNumber); !ok {
-			tags.setVals(taglib.TrackNumber, tracknumber)
-		}
-		composer := strings.Fields(title)[0]
-		if composer != title {
-			title = strings.TrimPrefix(title, composer)
+	Fields := strings.Fields(title)
+	if len(Fields) > 0 {
+		tracknumber := Fields[0]
+		if _, err := strconv.Atoi(tracknumber); err == nil {
+			title = strings.TrimPrefix(title, tracknumber)
 			title = strings.TrimSpace(title)
-			//Соната для фортепиано 9 pе мажор
-			if _, ok := t.vals(taglib.Composer); !ok {
-				tags.setVals(taglib.Composer, strings.ReplaceAll(composer, "_", " "))
+			//Моцарт Соната для фортепиано 9 pе мажор
+			if _, ok := t.vals(taglib.TrackNumber); !ok {
+				tags.setVals(taglib.TrackNumber, tracknumber)
+			}
+			Fields := strings.Fields(title)
+			if len(Fields) > 0 {
+				composer := Fields[0]
+				if composer != title {
+					title = strings.TrimPrefix(title, composer)
+					title = strings.TrimSpace(title)
+					//Соната для фортепиано 9 pе мажор
+					if _, ok := t.vals(taglib.Composer); !ok {
+						tags.setVals(taglib.Composer, strings.ReplaceAll(composer, "_", " "))
+					}
+				}
 			}
 		}
 	}
@@ -721,21 +729,21 @@ func (t *Tags) parse(album, file string) {
 }
 
 func LL(file string) (ok bool) {
-	ft := audios[file]
-	if ft == "" {
+	att := sources[file]
+	if att == nil || att.audio == "" {
 		switch Ext(file) {
 		case ".wav", ".flac", ".ape", ".wv", ".dsf", ".dff", ".tak", ".tta", ".ofr":
 			return true
 		}
 		return
 	}
-	switch ft {
+	switch att.audio {
 	case "flac", "alac", "ape", "wavpack", "dsd_lsbf":
 		return true
 	case "aac", "mp3":
 		return
 	default:
-		if strings.HasPrefix(ft, "pcm_") {
+		if strings.HasPrefix(att.audio, "pcm_") {
 			return true
 		}
 	}

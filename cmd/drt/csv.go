@@ -11,11 +11,9 @@ type ATT struct {
 	album string
 	title string
 	tags  Tags
+	out   bool
+	audio string
 }
-
-var (
-	results = make(map[string]*ATT)
-)
 
 type Row struct {
 	head map[string]int
@@ -82,6 +80,7 @@ func (t *Tags) timeLine(album, in, title, a string) {
 		inMp4  = filepath.Join(in, mp4)
 		mov    = title + ".mov"
 		inMov  = filepath.Join(in, mov)
+		probes []string
 	)
 	if err != nil {
 		res, err = open(inMp4) //flac.mp4 alac.mp4
@@ -99,10 +98,8 @@ func (t *Tags) timeLine(album, in, title, a string) {
 	base := filepath.Base(res.Name())
 	timeline := a == "csv"
 	if timeline {
-		var probes []string
 		a, probes = probe(in, base, false)
 		fmt.Println(append(probes, probeA(res.Name(), true)...))
-		audios[res.Name()] = a
 	}
 	lpcm := false
 	xlac := false
@@ -179,27 +176,23 @@ func (t *Tags) timeLine(album, in, title, a string) {
 		f, err := open(args1)
 		if err == nil {
 			if i > 0 {
-				// Кроме исходного
-				a, probes := probe(filepath.Dir(args1), filepath.Base(args1), false)
+				a, probes = probe(filepath.Dir(args1), filepath.Base(args1), false)
 				fmt.Println(append(probes, probeA(res.Name(), true)...))
-				audios[args1] = a
 			}
+			source, ok := sources[args1]
+			if !ok {
+				source = &ATT{}
+			}
+			source.album = album
+			source.title = title
+			source.out = i > 0
+			source.audio = a
+			sources[args1] = source
+
 			t.write(args1)
-			readTags(args1).print(2, args1, false)
-			switch {
-			case argsTags:
-				// Для тегов из командной строки ничего не сохраняем в sources/results
+			sources[args1].tags = readTags(args1)
+			// sources[args1].tags.print(2, args1, false)
 
-			case timeline && i == 0:
-				// Для временной шкалы и первого файла (исходника)
-				sources[args1] = &ATT{album, title, *t}
-
-			case i > 0:
-				if _, exists := results[args1]; !exists {
-					// Если результата нет в results
-					results[args1] = &ATT{album, title, *t}
-				}
-			}
 			f.Close()
 		}
 	}
