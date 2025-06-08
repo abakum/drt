@@ -223,35 +223,7 @@ func main() {
 		}
 
 		a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
-		fmt.Println(append(probes, probeA(file, true)...))
-		if slices.Contains(probes, "format_name=mpegts") && Ext(file) != ".mts" {
-			mov := file + ".mov"
-			if f, err := open(mov); err == nil {
-				f.Close()
-				sources[mov] = sources[file]
-				delete(sources, file)
-				file = mov
-				a, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-			} else {
-				args := []string{
-					"-hide_banner",
-					"-v", "error",
-					"-i", filepath.Base(file),
-					"-c", "copy", mov,
-				}
-				rs, err := run(ctx, os.Stdout, "ffmpeg", filepath.Dir(file), args...)
-				if err == nil && rs == 0 {
-					log.Println(file, "~>", mov)
-					sources[mov] = sources[file]
-					delete(sources, file)
-					file = mov
-					a, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-				} else {
-					log.Println("Не удалось создать файл", mov, err, "код завершения", rs)
-				}
-			}
-		}
-		fmt.Println(append(probes, probeA(file, true)...))
+		fmt.Println(a, append(probes, probeA(file, true)...))
 
 		source.album = album
 		source.title = title
@@ -274,7 +246,11 @@ func main() {
 		return
 	}
 	// drt file
-	log.Println("Исходные медиафайлы------------------------------")
+	const (
+		src = "Исходные медиафайлы------------------------------"
+		trg = "Результирующие медиафайлы------------------------"
+	)
+	log.Println(src)
 	for _, file := range mapKeys(sources, false) {
 		if Ext(file) == ".csv" {
 			continue
@@ -283,7 +259,7 @@ func main() {
 	}
 	results := mapKeys(sources, true)
 	if len(results) > 0 {
-		log.Println("Результирующие медиафайлы------------------------")
+		log.Println(trg)
 		for _, file := range results {
 			sources[file].tags.print(2, file, true)
 		}
@@ -322,16 +298,46 @@ func main() {
 			for _, file := range mapKeys(sources, false) {
 				source := sources[file]
 				a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
-				fmt.Println(append(probes, probeA(file, true)...))
+				fmt.Println(a, append(probes, probeA(file, true)...))
 				source.audio = a
 				source.tags.set("", tags)
 				source.tags.write(file)
 				source.tags = readTags(file)
-				// добавляет и в sources и в  results
-				source.tags.timeLine(source.album, filepath.Dir(file), file, a)
+				// добавляет в sources
+				if slices.Contains(probes, "format_name=mpegts") {
+					mov := file + ".mov"
+					if f, err := open(mov); err == nil {
+						f.Close()
+						sources[mov] = sources[file]
+						delete(sources, file)
+						file = mov
+						a, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+						fmt.Println(a, append(probes, probeA(file, true)...))
+					} else {
+						args := []string{
+							"-hide_banner",
+							"-v", "error",
+							"-i", filepath.Base(file),
+							"-c", "copy", mov,
+						}
+						rs, err := run(ctx, os.Stdout, "ffmpeg", filepath.Dir(file), args...)
+						if err == nil && rs == 0 {
+							log.Println(file, "~>", mov)
+							sources[mov] = sources[file]
+							delete(sources, file)
+							file = mov
+							a, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+							fmt.Println(a, append(probes, probeA(file, true)...))
+						} else {
+							log.Println("Не удалось создать файл", mov, err, "код завершения", rs)
+						}
+					}
+				} else {
+					source.tags.timeLine(source.album, filepath.Dir(file), file, a)
+				}
 			}
 		}
-		log.Println("Исходные медиафайлы------------------------------")
+		log.Println(src)
 		for _, file := range mapKeys(sources, false) {
 			if Ext(file) == ".csv" {
 				continue
@@ -340,7 +346,7 @@ func main() {
 		}
 		results := mapKeys(sources, true)
 		if len(results) > 0 {
-			log.Println("Результирующие медиафайлы------------------------")
+			log.Println(trg)
 			for _, file := range results {
 				swrpp(file, sources[file], tags)
 			}
@@ -452,6 +458,7 @@ Artist=Иван Петров
 Если в консольном вводе первая строка не начинается с тэга то это значение к тэгу Comment
 Завершай консольный ввод пустой строкой. Чтоб ввести пустую строку в Comment введи /
 Чтоб убрать все значение тэга X введи X=. Чтоб убрать значение всех тэгов введи =
+Если в видеофайле a.ext с mpegts ввести == то запишу a.ext.mov
 Если в видеофайле звук:
  - в pcm и ввести == то запишу .mp4 со звуком в alac, .flac, .mp3
  - в alac или flac и ввести == то запишу .flac, .mp3
