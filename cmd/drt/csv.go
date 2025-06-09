@@ -39,12 +39,12 @@ func (r Row) val(key string) (val string) {
 	return
 }
 
-func (r Row) print(key string) (kv string) {
-	if val := r.val(key); val != "" {
-		kv = key + "=" + val
-	}
-	return
-}
+// func (r Row) print(key string) (kv string) {
+// 	if val := r.val(key); val != "" {
+// 		kv = key + "=" + val
+// 	}
+// 	return
+// }
 
 func isFirstAfterSecond(first, second string) bool {
 	fi2, err := os.Stat(second)

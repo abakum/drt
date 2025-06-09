@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"os"
 	"os/exec"
 	"path"
@@ -80,6 +81,12 @@ func main() {
 	)
 
 	log.SetFlags(log.Lshortfile)
+	for k, v := range met {
+		log.Println(v, "TypeByExtension(", k)
+		log.Println(mime.TypeByExtension(k))
+		log.Println(k, "ExtensionsByType(", v)
+		log.Println(mime.ExtensionsByType(v))
+	}
 
 	exe, err = os.Executable()
 	if err != nil {
@@ -652,5 +659,19 @@ func qq(exe string) (path string) {
 	// a\\b
 	path = `\"` + path + `\"`
 	// \"a\\b\"
+	return
+}
+
+func Keys[Map ~map[K]V, K comparable, V any](m Map) (keys []K) {
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return
+}
+
+func Values[Map ~map[K]V, K comparable, V any](m Map) (values []V) {
+	for _, v := range m {
+		values = append(values, v)
+	}
 	return
 }

@@ -216,10 +216,10 @@ func newTags(ss ...string) (tags Tags) {
 	return
 }
 
-func deleteFirstNotLetter(s string) string {
-	re := regexp.MustCompile(`^[^\p{Letter}]*`)
-	return re.ReplaceAllString(s, "")
-}
+//	func deleteFirstNotLetter(s string) string {
+//		re := regexp.MustCompile(`^[^\p{Letter}]*`)
+//		return re.ReplaceAllString(s, "")
+//	}
 func removeFirstNonLatinCyrillic(s string) string {
 	re := regexp.MustCompile(`^[^\p{Latin}\p{Cyrillic}]*`)
 	return re.ReplaceAllString(s, "")

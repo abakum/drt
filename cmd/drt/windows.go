@@ -18,6 +18,16 @@ import (
 	"golang.org/x/text/transform"
 )
 
+var (
+	met = map[string]string{
+		".csv":  "text/csv",
+		".mov":  "video/quicktime",
+		".mp4":  "video/mp4",
+		".flac": "audio/x-flac",
+		".mp3":  "audio/mpeg",
+	}
+)
+
 func amAdmin() bool {
 	f, err := os.Open("\\\\.\\PHYSICALDRIVE0")
 	if err != nil {
@@ -51,7 +61,8 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 		if err == nil {
 			return
 		}
-		log.Printf("Error creating %s link: %v\n", m, err)
+		log.Printf(`Error creating %s link: %v
+`, m, err)
 		if !amAdmin() {
 			wd, _ := os.Getwd()
 			err = ShellExecute("runas", "cmd", wd, 1, "/c", fmt.Sprintf(`mklink %s "%s" "%s"`, opt, newname, oldname))
@@ -71,6 +82,16 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 }
 
 func install(oldname string, lnks ...string) {
+	bin := drt
+	prog := drTags
+	vendor := "Abakum"
+	FriendlyAppName := "Tagger for DaVinci Resolve"
+	path := qq(exe)
+	command := path + " " + qq("%1")
+	head := `Windows Registry Editor Version 5.00
+
+`
+
 	if oldname == "" {
 		// uninstall
 		for _, lnk := range lnks {
@@ -82,7 +103,7 @@ func install(oldname string, lnks ...string) {
 			Target:       oldname,
 			IconLocation: oldname,
 			// Arguments:        "",
-			Description: "Tagger for DaVinci Resolve",
+			Description: FriendlyAppName,
 			// Hotkey:           "",
 			WindowStyle: "3",
 			// WorkingDirectory: "",
@@ -99,103 +120,34 @@ func install(oldname string, lnks ...string) {
 	}
 	defer os.Remove(reg.Name())
 	defer reg.Close()
-	es := []string{".csv", ".mov", ".mp4", ".flac", ".mp3"}
-	mes := map[string]string{
-		".csv":  "text/csv",
-		".mov":  "video/quicktime",
-		".mp4":  "video/mp4",
-		".flac": "audio/x-flac",
-		".mp3":  "audio/mpeg",
-	}
 	var sb strings.Builder
 	if oldname == "" {
-		sb.WriteString(`Windows Registry Editor Version 5.00
-
-[-HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\drt.exe]
-
-[-HKEY_CURRENT_USER\SOFTWARE\Classes\Applications\drt.exe]
-
-`)
-		removeIDs(&sb, es...)
-		// [-HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.csv]
-		// [-HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.mov]
-		// [-HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.mp4]
-		// [-HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.flac]
-		// [-HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.mp3]
-		sb.WriteString(`
-[-HKEY_CURRENT_USER\SOFTWARE\Abakum\drTags]
-[HKEY_CURRENT_USER\SOFTWARE\RegisteredApplications]
-"drTags"=-
-`)
+		// uninstall
+		sb.WriteString(head)
+		appPaths(&sb, drt)
+		applications(&sb, bin)
+		progIDs(&sb, vendor, prog)
+		registeredApplications(&sb, vendor, prog)
 	} else {
+		// install
 		// https://learn.microsoft.com/en-us/windows/win32/shell/app-registration
-		sb.WriteString(`Windows Registry Editor Version 5.00
+		sb.WriteString(head)
+		appPaths(&sb, drt, path)
+		applications(&sb, bin, prog, command, FriendlyAppName)
+		progIDs(&sb, vendor, prog, command)
+		registeredApplications(&sb, vendor, prog, FriendlyAppName)
 
-[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\drt.exe]
-@="\"C:\\Users\\user_\\go\\bin\\drt.exe\""
-
-[HKEY_CURRENT_USER\SOFTWARE\Classes\Applications\drt.exe]
-@="drTags"
-"FriendlyAppName"="Tagger for DaVinci Resolve"
-`)
-		// mknv(`SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\`+base, map[string]string{
-		// 	"": `"` + exe + `"`,
-		// })
-		// mknv(`SOFTWARE\Classes\Applications\`+base, map[string]string{
-		// 	"":                "drTags",
-		// 	"FriendlyAppName": "Tagger for DaVinci Resolve",
-		// })
-		SupportedTypes(&sb, es...)
-		// [HKEY_CURRENT_USER\SOFTWARE\Classes\Applications\drt.exe\SupportedTypes]
-		// ".csv"=""
-		// ".mov"=""
-		// ".mp4"=""
-		// ".flac"=""
-		// ".mp3"=""
-		sb.WriteString(`
-[HKEY_CURRENT_USER\SOFTWARE\Classes\Applications\drt.exe\shell\open\command]
-@="\"C:\\Users\\user_\\go\\bin\\drt.exe\" \"%1\""
-
-`)
-		progIDs(&sb, es...)
-		// [HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.csv\Shell\Open\Command]
-		// @="\"C:\\Users\\user_\\go\\bin\\drt.exe\" \"%1\""
-		// [HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.mov\Shell\Open\Command]
-		// @="\"C:\\Users\\user_\\go\\bin\\drt.exe\" \"%1\""
-		// [HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.mp4\Shell\Open\Command]
-		// @="\"C:\\Users\\user_\\go\\bin\\drt.exe\" \"%1\""
-		// [HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.flac\Shell\Open\Command]
-		// @="\"C:\\Users\\user_\\go\\bin\\drt.exe\" \"%1\""
-		// [HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags.mp3\Shell\Open\Command]
-		// @="\"C:\\Users\\user_\\go\\bin\\drt.exe\" \"%1\""
-		sb.WriteString(`
-[HKEY_CURRENT_USER\SOFTWARE\Abakum\drTags\Capabilities]
-"ApplicationName"="drTags"
-"ApplicationDescription"="Tagger for DaVinci Resolve"
-`)
-		FileAssociations(&sb, es...)
-		// [HKEY_CURRENT_USER\SOFTWARE\Abakum\drTags\Capabilities\FileAssociations]
-		// ".csv"="Abakum.drTags.csv"
-		// ".mov"="Abakum.drTags.mov"
-		// ".mp4"="Abakum.drTags.mp4"
-		// ".flac"="Abakum.drTags.flac"
-		// ".mp3"="Abakum.drTags.mp3"
-		sb.WriteString(`
-[HKEY_CURRENT_USER\SOFTWARE\RegisteredApplications]
-"drTags"="Software\\Abakum\\drTags\\Capabilities"
-`)
-		TypeByExtension(&sb, mes, es...)
+		TypeByExtension(&sb)
 	}
-	regS := strings.Replace(sb.String(), qq(`C:\Users\user_\go\bin\drt.exe`), qq(exe), -1)
+	// regS := strings.Replace(sb.String(), qq(`C:\Users\user_\go\bin\drt.exe`), qq(exe), -1)
 
-	log.Println(reg.Name())
-	fmt.Println(regS)
+	fmt.Println(sb.String())
 
 	// Пишем .reg с UTF-16 LE BOM
 	encoding := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)
 	encoder := encoding.NewEncoder()
 	writer := transform.NewWriter(reg, encoder)
-	writer.Write([]byte(regS))
+	writer.Write([]byte(sb.String()))
 	writer.Close()
 	reg.Close()
 
@@ -218,40 +170,120 @@ func install(oldname string, lnks ...string) {
 	NotifySystemOfNewRegistration()
 }
 
-func SupportedTypes(sb *strings.Builder, es ...string) {
-	sb.WriteString(`[HKEY_CURRENT_USER\SOFTWARE\Classes\Applications\drt.exe\SupportedTypes]` + "\n")
-	for _, e := range es {
-		sb.WriteString(fmt.Sprintf(`"%s"=""`+"\n", e))
+func sl3(o ...string) (s0, s1, s2 string) {
+	if len(o) > 0 {
+		s0 = o[0]
+	}
+	if len(o) > 1 {
+		s1 = o[1]
+	}
+	if len(o) > 2 {
+		s2 = o[2]
+	}
+	return
+}
+
+func applications(sb *strings.Builder, bin string, prog_command_FriendlyAppName ...string) {
+	if len(prog_command_FriendlyAppName) < 3 {
+		sb.WriteString(`[-HKEY_CURRENT_USER\SOFTWARE\Classes\Applications\` + bin + `.exe]
+`)
+		return
+	}
+	prog, command, FriendlyAppName := sl3(prog_command_FriendlyAppName...)
+	sb.WriteString(`[HKEY_CURRENT_USER\SOFTWARE\Classes\Applications\` + bin + `.exe]
+@="` + prog + `"
+"FriendlyAppName"="` + FriendlyAppName + `"
+`)
+	sb.WriteString(`[HKEY_CURRENT_USER\SOFTWARE\Classes\Applications\` + bin + `.exe\SupportedTypes]
+`)
+	for _, e := range Keys(met) {
+		sb.WriteString(fmt.Sprintf(`"%s"=""
+`, e))
+	}
+	sb.WriteString(`[HKEY_CURRENT_USER\SOFTWARE\Classes\Applications\` + bin + `.exe\shell\open\command]
+@="` + command + `"
+
+`)
+}
+
+// progIDs(&sb,"Abakum.drTags", qq(exe))
+func progIDs(sb *strings.Builder, vendor, prog string, ShellOpenCommand ...string) {
+	soc, _, _ := sl3(ShellOpenCommand...)
+	for _, e := range Keys(met) {
+		if len(ShellOpenCommand) > 0 {
+			sb.WriteString(fmt.Sprintf(`[HKEY_CURRENT_USER\SOFTWARE\Classes\%s.%s%s\Shell\Open\Command]
+`, vendor, prog, e))
+			sb.WriteString(`@="` + soc + `"
+`)
+		} else {
+			sb.WriteString(fmt.Sprintf(`[-HKEY_CURRENT_USER\SOFTWARE\Classes\%s.%s%s]
+`, vendor, prog, e))
+		}
 	}
 }
 
-func progIDs(sb *strings.Builder, es ...string) {
-	for _, e := range es {
-		sb.WriteString(fmt.Sprintf(`[HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags%s\Shell\Open\Command]`+"\n", e))
-		sb.WriteString(`@="\"C:\\Users\\user_\\go\\bin\\drt.exe\" \"%1\""` + "\n")
+// appPaths(&sb,"drt", qq(exe))
+func appPaths(sb *strings.Builder, bin string, path ...string) {
+	if len(path) < 1 {
+		sb.WriteString(`[-HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\` + bin + `.exe]
+`)
+		return
+	}
+	sb.WriteString(`[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\` + bin + `.exe]
+`)
+	sb.WriteString(`@="` + path[0] + `"
+
+`)
+}
+
+func registeredApplications(sb *strings.Builder, vendor, prog string, description ...string) {
+	if len(description) < 1 {
+		sb.WriteString(fmt.Sprintf(`
+[-HKEY_CURRENT_USER\SOFTWARE\%s\%s]
+[HKEY_CURRENT_USER\SOFTWARE\RegisteredApplications]
+"%s"=-
+
+`, vendor, prog, prog))
+		return
+	}
+	sb.WriteString(fmt.Sprintf(`
+[HKEY_CURRENT_USER\SOFTWARE\RegisteredApplications]
+"%s"="SOFTWARE\\%s\\%s\\Capabilities"
+`, prog, vendor, prog))
+
+	d, _, _ := sl3(description...)
+	sb.WriteString(fmt.Sprintf(`
+[HKEY_CURRENT_USER\SOFTWARE\%s\%s\Capabilities]
+"ApplicationName"="%s"
+"ApplicationDescription"="%s"
+`, vendor, prog, prog, d))
+	sb.WriteString(fmt.Sprintf(`[HKEY_CURRENT_USER\SOFTWARE\%s\%s\Capabilities\FileAssociations]
+`, vendor, prog))
+	for _, e := range Keys(met) {
+		sb.WriteString(fmt.Sprintf(`"%s"="%s.%s%s"
+`, e, vendor, prog, e))
 	}
 }
 
-func removeIDs(sb *strings.Builder, es ...string) {
-	for _, e := range es {
-		sb.WriteString(fmt.Sprintf(`[-HKEY_CURRENT_USER\SOFTWARE\Classes\Abakum.drTags%s]`+"\n", e))
-	}
-}
-
-func FileAssociations(sb *strings.Builder, es ...string) {
-	sb.WriteString(`[HKEY_CURRENT_USER\SOFTWARE\Abakum\drTags\Capabilities\FileAssociations]` + "\n")
-	for _, e := range es {
-		sb.WriteString(fmt.Sprintf(`"%s"="Abakum.drTags%s"`+"\n", e, e))
-	}
-}
-
-func TypeByExtension(sb *strings.Builder, m map[string]string, es ...string) {
-	for _, e := range es {
-		if t, ok := m[e]; ok && mime.TypeByExtension(e) == "" {
-			sb.WriteString(fmt.Sprintf(`[HKEY_CURRENT_USER\SOFTWARE\Classes\%s]`+"\n", e))
-			sb.WriteString(fmt.Sprintf(`@="Abakum.drTags%s"`+"\n", e))
-			sb.WriteString(fmt.Sprintf(`"Content Type"="%s"`+"\n", t))
-			sb.WriteString(fmt.Sprintf(`"PerceivedType"="%s"`+"\n", strings.Split(t, "/")[0]))
+func TypeByExtension(sb *strings.Builder) {
+	for e := range met {
+		t := met[e]
+		tbe := mime.TypeByExtension(e)
+		if tbe == "" {
+			// Создадим с правильным flac
+			// https://mimetype.io/audio/x-flac#:~:text=audio/x%2Dflac%20%2D%20mimetype,when%20it's%20known%20as%20OggFLAC).
+			sb.WriteString(fmt.Sprintf(`[HKEY_CURRENT_USER\SOFTWARE\Classes\%s]
+`, e))
+			sb.WriteString(fmt.Sprintf(`@="Abakum.drTags%s"
+`, e))
+			tTrue := strings.Replace(t, "/x-", "/", 1)
+			sb.WriteString(fmt.Sprintf(`"Content Type"="%s"
+`, tTrue))
+			sb.WriteString(fmt.Sprintf(`"PerceivedType"="%s"
+`, strings.Split(t, "/")[0]))
+			met[e] = tTrue
+		} else {
+			met[e] = tbe
 		}
 	}
 }

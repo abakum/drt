@@ -7,6 +7,17 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
+)
+
+var (
+	met = map[string]string{
+		".csv":  "text/csv",
+		".mov":  "video/quicktime",
+		".mp4":  "video/mp4",
+		".flac": "audio/flac",
+		".mp3":  "audio/mpeg",
+	}
 )
 
 func mkLink(oldname, newname string, link, hard bool) (err error) {
@@ -49,7 +60,7 @@ func install(oldname string, lnks ...string) {
 		ex = link
 	}
 
-	log.Println("Создаю меню для nautilus", sh,
+	log.Println("Меню для nautilus", sh,
 		os.WriteFile(sh, []byte(fmt.Sprintf(`#!/bin/bash
 gnome-terminal --title %s -- %s`, drTags, drTags)), 0744))
 	deskTop(desktop, ex)
@@ -71,7 +82,8 @@ gnome-terminal --title %s -- %s`, drTags, drTags)), 0744))
 }
 
 func deskTop(desktop, ex string) {
-	log.Println("Создаю ярлык", desktop,
+	MimeType := strings.Join(Values(met), ";")
+	log.Println("Ярлык на рабочем столе", desktop,
 		os.WriteFile(desktop, []byte(`[Desktop Entry]
 Name=drTags
 Type=Application
@@ -79,8 +91,8 @@ Exec=`+ex+` %F
 Terminal=true
 Icon=edit-find-replace
 NoDisplay=false
-MimeType=text/csv;audio/mpeg;audio/flac;audio/mp4;video/mp4;video/quicktime;
+MimeType=`+MimeType+`;
 Categories=AudioVideo;AudioVideoEditing;
-Keywords=media info;metadata;tag;video;audio;codec;csv;mp3;flac;m4a;mp4;mov;davinci;resolve
+Keywords=media info;metadata;tag;video;audio;codec;davinci;resolve;
 `), 0644))
 }
