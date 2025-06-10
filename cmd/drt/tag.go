@@ -232,7 +232,9 @@ func removeNonAlphaNumSp(s string) string {
 func (t *Tags) write(args1 string) {
 	t.delEmpty()
 	uniq := make(map[string]bool) // отбросим повторения хэштэгов
-	uniq["LL"] = LL(args1)
+	if LL(args1) {
+		uniq["#LL"] = true
+	}
 	for key, vs := range *t {
 		switch key {
 		case HT, EC, DS, taglib.Comment:
@@ -240,43 +242,44 @@ func (t *Tags) write(args1 string) {
 		}
 		for _, v := range vs {
 			name := removeFirstNonLatinCyrillic(v)
+
 			if name == "" {
 				// Числа пригодятся
 				switch key {
 				case taglib.MovementName:
 					if len(v) < 2 {
-						uniq["m0"+v] = true
+						uniq["#m0"+v] = true
 					} else {
-						uniq["m"+v[:2]] = true
+						uniq["#m"+v[:2]] = true
 					}
 				case taglib.TrackNumber:
 					if len(v) < 2 {
-						uniq["t0"+v] = true
+						uniq["#t0"+v] = true
 					} else {
-						uniq["t"+v[:2]] = true
+						uniq["#t"+v[:2]] = true
 					}
 				case taglib.Date:
 					if len(v) > 3 {
-						uniq["y"+v[:4]] = true
+						uniq["#y"+v[:4]] = true
 					}
 					if len(v) > 7 {
-						uniq["d"+v[:8]] = true
+						uniq["#d"+v[:8]] = true
 					}
 				}
 				continue
 			}
-			uniq[name] = true
+			if key == taglib.InitialKey {
+				name = strings.Replace(name, "#", "d", -1) // C#m~>Cdm
+			}
+			name = removeNonAlphaNumSp(name) // №1~>1
+			if len(name) > 0 {
+				name = "#" + strings.Replace(name, " ", "_", -1)
+				uniq[name] = true
+			}
 		}
 	}
 
-	var hashTags []string // Список #хэштэгов
-	for k, ok := range uniq {
-		if ok && len(k) > 0 {
-			k = strings.Replace(k, "#", "d", -1) // C#m~>Cdm
-			k = removeNonAlphaNumSp(k)           // №1~>1
-			hashTags = append(hashTags, "#"+strings.Replace(k, " ", "_", -1))
-		}
-	}
+	hashTags := Keys(uniq)
 
 	slices.Sort(hashTags) // упорядочим хэштэги
 
