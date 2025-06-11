@@ -11,17 +11,17 @@ import (
 	"path/filepath"
 )
 
-func install_(oldname string, lnks ...string) {
-	// ~/Applications/drTags.app dir/drTags
+func install(oldname string, lnks ...string) {
 	adr, link := lnks[0], lnks[1]
+	// ~/Applications/drTags.app dir/drTags
 	if oldname == "" {
 		//uninstall
 		for _, lnk := range lnks {
-			os.RemoveAll(lnk)
+			log.Println(lnk, "~> /dev/null", os.RemoveAll(lnk))
 		}
 		return
 	}
-	mkLink(oldname, link, true, false)
+	ln(oldname, link, true, false)
 
 	applications := filepath.Dir(adr)
 
@@ -69,35 +69,6 @@ func install_(oldname string, lnks ...string) {
 		return nil
 	})
 	main := filepath.Join(adr, "Contents", "Resources", "Scripts", "main")
-	os.Remove(main)
-	mkLink(oldname, main, true, false)
-}
-
-func mkLink(oldname, newname string, link, hard bool) (err error) {
-	if link {
-		opt := "/s"
-		osLink := os.Symlink
-		m := "symbolic"
-		if hard {
-			osLink = os.Link
-			opt = ""
-			m = "hard"
-		}
-		err = osLink(oldname, newname)
-		log.Println("ln", opt, oldname, newname, err)
-		if err == nil {
-			return
-		}
-		log.Printf("Error creating %s link: %v\n", m, err)
-		return
-	}
-	err = os.WriteFile(newname, []byte(`#!/usr/bin/env bash
-
-set -o nounset
-set -o errexit
-`+oldname+` "${@}"`), 0744)
-	if err != nil {
-		log.Println("Error write .sh:", err)
-	}
-	return
+	log.Println(main, "~> /dev/null", os.Remove(main))
+	ln(oldname, main, true, false)
 }

@@ -30,7 +30,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -485,8 +484,6 @@ Artist=Иван Петров
 Расширенно про mp3 https://id3.org/id3v2.3.0
 Страничка drTags https://github.com/abakum/drt
 `)
-	// GOOS := runtime.GOOS
-	GOOS := "darwin"
 	dr := drTags
 
 	if len(xdg.ApplicationDirs) < 1 {
@@ -494,26 +491,24 @@ Artist=Иван Петров
 		return
 	}
 	applications := xdg.ApplicationDirs[0]
-	switch GOOS {
+	switch runtime.GOOS {
 	case "darwin":
-		dr += ".app"
+		dr += ".app" //dir
 	case "windows":
 		dr += ".lnk"
 	default:
 		dr += ".desktop"
-		if len(xdg.ApplicationDirs) < 2 {
-			log.Println("xdg.ApplicationDirs", xdg.ApplicationDirs)
-			return
-		}
-		applications = xdg.ApplicationDirs[1]
 	}
-
 	adr := filepath.Join(applications, dr)
+	oldname := filepath.Join(dir, drt) + ext
+
 	verb := "install"
 	f, err := os.Open(adr)
 	if err == nil {
+		// Установлен
 		f.Close()
 		verb = "uninstall"
+		oldname = ""
 	}
 	if !yes(verb + " " + drTags) {
 		return
@@ -521,27 +516,17 @@ Artist=Иван Петров
 	defer ctrlC()
 
 	desktop := filepath.Join(xdg.UserDirs.Desktop, dr)
-	oldname := filepath.Join(dir, drt) + ext
 	link := filepath.Join(dir, drTags)
 
-	switch GOOS {
+	switch runtime.GOOS {
 	case "darwin":
-		if verb == "uninstall" {
-			install("", adr, link)
-			return
-		}
 		install(oldname, adr, link)
 	case "windows":
-		lnks := []string{
+		install(oldname,
 			adr,
 			desktop,
 			filepath.Join(xdg.DataDirs[0], `Microsoft\Windows\SendTo`, dr),
-		}
-		if verb == "uninstall" {
-			install("", lnks...)
-			return
-		}
-		install(oldname, lnks...)
+		)
 	case "linux":
 		sh := filepath.Join(xdg.DataHome, "nautilus/scripts", drTags)
 		xdgDesktopIcon := "xdg-desktop-icon"
@@ -682,17 +667,6 @@ func trimExt(path string) string {
 	return strings.TrimSuffix(path, filepath.Ext(path))
 }
 
-func qq(exe string) (path string) {
-	// a\b
-	path = fmt.Sprintf("%q", exe)
-	// "a\\b"
-	path = strings.Trim(path, `"`)
-	// a\\b
-	path = `\"` + path + `\"`
-	// \"a\\b\"
-	return
-}
-
 func Keys[Map ~map[K]V, K comparable, V any](m Map) (keys []K) {
 	for k := range m {
 		keys = append(keys, k)
@@ -707,63 +681,31 @@ func Values[Map ~map[K]V, K comparable, V any](m Map) (values []V) {
 	return
 }
 
-func install(oldname string, lnks ...string) {
-	adr, link := lnks[0], lnks[1]
-	if oldname == "" {
-		//uninstall
-		for _, lnk := range lnks {
-			os.RemoveAll(lnk)
+func ln(oldname, newname string, link, hard bool) (err error) {
+	if link {
+		opt := "/s"
+		osLink := os.Symlink
+		m := "symbolic"
+		if hard {
+			osLink = os.Link
+			opt = ""
+			m = "hard"
 		}
+		err = osLink(oldname, newname)
+		log.Println("ln", opt, oldname, newname, err)
+		if err == nil {
+			return
+		}
+		log.Printf("Error creating %s link: %v\n", m, err)
 		return
 	}
-	mkLink(oldname, link, true, false)
+	err = os.WriteFile(newname, []byte(`#!/usr/bin/env bash
 
-	applications := filepath.Dir(adr)
-
-	// Walk through the embedded directory and copy files/dirs.
-	fs.WalkDir(app, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		destPath := filepath.Join(applications, path)
-
-		if d.IsDir() {
-			// Create destination directory if it doesn't exist.
-			if _, err := os.Stat(destPath); os.IsNotExist(err) {
-				err = os.MkdirAll(destPath, 0755)
-				if err != nil {
-					fmt.Println("Error creating directory:", err)
-					return err
-				}
-			}
-			return nil
-		}
-
-		// Copy file.
-		srcFile, err := app.Open(path)
-		if err != nil {
-			fmt.Println("Error opening embedded file:", err)
-			return err
-		}
-		defer srcFile.Close()
-
-		destFile, err := os.Create(destPath)
-		if err != nil {
-			fmt.Println("Error creating destination file:", err)
-			return err
-		}
-		defer destFile.Close()
-
-		_, err = io.Copy(destFile, srcFile)
-		if err != nil {
-			fmt.Println("Error copying file:", err)
-			return err
-		}
-		fmt.Println(path, "~>", destPath)
-		return nil
-	})
-	main := filepath.Join(adr, "Contents", "Resources", "Scripts", "main")
-	os.Remove(main)
-	mkLink(oldname, main, true, false)
+set -o nounset
+set -o errexit
+`+oldname+` "${@}"`), 0744)
+	if err != nil {
+		log.Println("Error write .sh:", err)
+	}
+	return
 }

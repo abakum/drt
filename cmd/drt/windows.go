@@ -81,7 +81,7 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 	return
 }
 
-func install_(oldname string, lnks ...string) {
+func install(oldname string, lnks ...string) {
 	bin := drt
 	prog := drTags
 	vendor := "Abakum"
@@ -300,4 +300,15 @@ func NotifySystemOfNewRegistration() {
 		SHCNF_DWORD|SHCNF_FLUSH,
 		nullptr, nullptr)
 	time.Sleep(1000)
+}
+
+func qq(exe string) (path string) {
+	// a\b
+	path = fmt.Sprintf("%q", exe)
+	// "a\\b"
+	path = strings.Trim(path, `"`)
+	// a\\b
+	path = `\"` + path + `\"`
+	// \"a\\b\"
+	return
 }

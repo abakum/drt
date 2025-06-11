@@ -20,42 +20,9 @@ var (
 	}
 )
 
-func mkLink(oldname, newname string, link, hard bool) (err error) {
-	if link {
-		opt := "/s"
-		osLink := os.Symlink
-		m := "symbolic"
-		if hard {
-			osLink = os.Link
-			opt = ""
-			m = "hard"
-		}
-		err = osLink(oldname, newname)
-		log.Println("ln", opt, oldname, newname, err)
-		if err == nil {
-			return
-		}
-		log.Printf("Error creating %s link: %v\n", m, err)
-		return
-	}
-	err = os.WriteFile(newname, []byte(`#!/usr/bin/env bash
-
-set -o nounset
-set -o errexit
-`+oldname+` "${@}"`), 0744)
-	if err != nil {
-		log.Println("Error write .sh:", err)
-	}
-	return
-}
-
-func install_(oldname string, lnks ...string) {
-	desktop, sh, link, application, adr, xdgDesktopIcon, verb := lnks[0], lnks[1], lnks[2], lnks[3], lnks[4], lnks[5], lnks[6]
-	if f, err := open(link); err == nil {
-		f.Close()
-	} else {
-		mkLink(oldname, link, true, true)
-	}
+func install(oldname string, lnks ...string) {
+	desktop, sh, link, applications, adr, xdgDesktopIcon, verb := lnks[0], lnks[1], lnks[2], lnks[3], lnks[4], lnks[5], lnks[6]
+	ln(oldname, link, true, false)
 
 	ex := drTags
 	if _, err := exec.LookPath(ex); err != nil {
@@ -65,11 +32,12 @@ func install_(oldname string, lnks ...string) {
 
 	if _, err := exec.LookPath("nautilus"); err == nil {
 		log.Println("Меню для nautilus", sh,
-			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/bin/bash
-gnome-terminal --title %s -- %s`, drTags, drTags)), 0744))
+			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/usr/bin/env bash
+
+x-terminal-emulator -T %s -e %s`, ex, drTags)), 0744))
 	}
 	deskTop(desktop, ex)
-	cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+application) //
+	cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+applications) //
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
