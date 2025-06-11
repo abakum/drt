@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package main
 
@@ -38,16 +38,19 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 		log.Printf("Error creating %s link: %v\n", m, err)
 		return
 	}
-	name := trimExt(newname)
-	err = os.WriteFile(name+".sh", []byte(oldname+" %*"), 0744)
+	err = os.WriteFile(newname, []byte(`#!/usr/bin/env bash
+
+set -o nounset
+set -o errexit
+`+oldname+` "${@}"`), 0744)
 	if err != nil {
 		log.Println("Error write .sh:", err)
 	}
 	return
 }
 
-func install(oldname string, lnks ...string) {
-	desktop, sh, link, application, local, xdgDesktopIcon, verb := lnks[0], lnks[1], lnks[2], lnks[3], lnks[4], lnks[5], lnks[6]
+func install_(oldname string, lnks ...string) {
+	desktop, sh, link, application, adr, xdgDesktopIcon, verb := lnks[0], lnks[1], lnks[2], lnks[3], lnks[4], lnks[5], lnks[6]
 	if f, err := open(link); err == nil {
 		f.Close()
 	} else {
@@ -60,21 +63,23 @@ func install(oldname string, lnks ...string) {
 		ex = link
 	}
 
-	log.Println("Меню для nautilus", sh,
-		os.WriteFile(sh, []byte(fmt.Sprintf(`#!/bin/bash
+	if _, err := exec.LookPath("nautilus"); err == nil {
+		log.Println("Меню для nautilus", sh,
+			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/bin/bash
 gnome-terminal --title %s -- %s`, drTags, drTags)), 0744))
+	}
 	deskTop(desktop, ex)
 	cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+application) //
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	log.Println(cmd.Args, cmd.Run())
-	if f, err := open(local); err == nil {
+	if f, err := open(adr); err == nil {
 		f.Close()
 	} else {
-		deskTop(local, ex)
+		deskTop(adr, ex)
 	}
-	cmd = exec.CommandContext(ctx, xdgDesktopIcon, verb, "--novendor", local)
+	cmd = exec.CommandContext(ctx, xdgDesktopIcon, verb, "--novendor", adr)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -1,6 +1,6 @@
 package main
 
-//go install github.com/abakum/drt@master
+//go install github.com/abakum/drt@main
 //go get github.com/cardinalby/xgo-pack@master
 //go install github.com/cardinalby/xgo-pack
 //xgo-pack init
@@ -24,15 +24,16 @@ package main
 import (
 	"bufio"
 	"context"
+	"embed"
 	_ "embed"
 	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -72,6 +73,11 @@ var _ = version.Ver
 
 //go:embed VERSION
 var VERSION string
+
+//go:embed drTags.app
+var app embed.FS
+
+//https://github.com/RichardBronosky/AppleScript-droplet
 
 func main() {
 	var (
@@ -479,13 +485,32 @@ Artist=Иван Петров
 Расширенно про mp3 https://id3.org/id3v2.3.0
 Страничка drTags https://github.com/abakum/drt
 `)
-	dr := drTags + ".desktop"
-	if win {
-		dr = drTags + ".lnk"
+	// GOOS := runtime.GOOS
+	GOOS := "darwin"
+	dr := drTags
+
+	if len(xdg.ApplicationDirs) < 1 {
+		log.Println("xdg.ApplicationDirs", xdg.ApplicationDirs)
+		return
 	}
-	desktop := filepath.Join(xdg.UserDirs.Desktop, dr)
+	applications := xdg.ApplicationDirs[0]
+	switch GOOS {
+	case "darwin":
+		dr += ".app"
+	case "windows":
+		dr += ".lnk"
+	default:
+		dr += ".desktop"
+		if len(xdg.ApplicationDirs) < 2 {
+			log.Println("xdg.ApplicationDirs", xdg.ApplicationDirs)
+			return
+		}
+		applications = xdg.ApplicationDirs[1]
+	}
+
+	adr := filepath.Join(applications, dr)
 	verb := "install"
-	f, err := open(desktop)
+	f, err := os.Open(adr)
 	if err == nil {
 		f.Close()
 		verb = "uninstall"
@@ -494,14 +519,23 @@ Artist=Иван Петров
 		return
 	}
 	defer ctrlC()
-	oldname := filepath.Join(dir, drt) + ext
 
-	switch runtime.GOOS {
+	desktop := filepath.Join(xdg.UserDirs.Desktop, dr)
+	oldname := filepath.Join(dir, drt) + ext
+	link := filepath.Join(dir, drTags)
+
+	switch GOOS {
+	case "darwin":
+		if verb == "uninstall" {
+			install("", adr, link)
+			return
+		}
+		install(oldname, adr, link)
 	case "windows":
 		lnks := []string{
+			adr,
 			desktop,
 			filepath.Join(xdg.DataDirs[0], `Microsoft\Windows\SendTo`, dr),
-			filepath.Join(xdg.DataDirs[0], `Microsoft\Windows\Start Menu\Programs`, dr),
 		}
 		if verb == "uninstall" {
 			install("", lnks...)
@@ -509,12 +543,9 @@ Artist=Иван Петров
 		}
 		install(oldname, lnks...)
 	case "linux":
-		link := filepath.Join(dir, drTags)
 		sh := filepath.Join(xdg.DataHome, "nautilus/scripts", drTags)
 		xdgDesktopIcon := "xdg-desktop-icon"
 
-		application := path.Join(xdg.DataHome, "application")
-		local := path.Join(application, dr)
 		if verb == "uninstall" {
 			cmd := exec.CommandContext(ctx, xdgDesktopIcon, verb, desktop)
 			cmd.Stdin = os.Stdin
@@ -526,12 +557,11 @@ Artist=Иван Петров
 				log.Println(desktop, "~> /dev/null", os.Remove(desktop))
 			}
 
-			// log.Println(local, "~> /dev/null", os.Remove(local))
-			for _, lnk := range []string{local, sh, link} {
+			for _, lnk := range []string{adr, link, sh} {
 				log.Println(lnk, "~> /dev/null", os.Remove(lnk))
 			}
 
-			cmd = exec.CommandContext(ctx, "update-desktop-database", application)
+			cmd = exec.CommandContext(ctx, "update-desktop-database", applications)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -539,7 +569,7 @@ Artist=Иван Петров
 
 			return
 		}
-		install(oldname, desktop, sh, link, application, local, xdgDesktopIcon, verb)
+		install(oldname, desktop, sh, link, applications, adr, xdgDesktopIcon, verb)
 	}
 }
 
@@ -675,4 +705,65 @@ func Values[Map ~map[K]V, K comparable, V any](m Map) (values []V) {
 		values = append(values, v)
 	}
 	return
+}
+
+func install(oldname string, lnks ...string) {
+	adr, link := lnks[0], lnks[1]
+	if oldname == "" {
+		//uninstall
+		for _, lnk := range lnks {
+			os.RemoveAll(lnk)
+		}
+		return
+	}
+	mkLink(oldname, link, true, false)
+
+	applications := filepath.Dir(adr)
+
+	// Walk through the embedded directory and copy files/dirs.
+	fs.WalkDir(app, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		destPath := filepath.Join(applications, path)
+
+		if d.IsDir() {
+			// Create destination directory if it doesn't exist.
+			if _, err := os.Stat(destPath); os.IsNotExist(err) {
+				err = os.MkdirAll(destPath, 0755)
+				if err != nil {
+					fmt.Println("Error creating directory:", err)
+					return err
+				}
+			}
+			return nil
+		}
+
+		// Copy file.
+		srcFile, err := app.Open(path)
+		if err != nil {
+			fmt.Println("Error opening embedded file:", err)
+			return err
+		}
+		defer srcFile.Close()
+
+		destFile, err := os.Create(destPath)
+		if err != nil {
+			fmt.Println("Error creating destination file:", err)
+			return err
+		}
+		defer destFile.Close()
+
+		_, err = io.Copy(destFile, srcFile)
+		if err != nil {
+			fmt.Println("Error copying file:", err)
+			return err
+		}
+		fmt.Println(path, "~>", destPath)
+		return nil
+	})
+	main := filepath.Join(adr, "Contents", "Resources", "Scripts", "main")
+	os.Remove(main)
+	mkLink(oldname, main, true, false)
 }

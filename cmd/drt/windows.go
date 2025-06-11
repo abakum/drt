@@ -81,7 +81,7 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 	return
 }
 
-func install(oldname string, lnks ...string) {
+func install_(oldname string, lnks ...string) {
 	bin := drt
 	prog := drTags
 	vendor := "Abakum"
@@ -91,7 +91,6 @@ func install(oldname string, lnks ...string) {
 	head := `Windows Registry Editor Version 5.00
 
 `
-
 	if oldname == "" {
 		// uninstall
 		for _, lnk := range lnks {
