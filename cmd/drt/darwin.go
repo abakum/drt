@@ -3,6 +3,7 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	"io"
 	"io/fs"
@@ -10,6 +11,11 @@ import (
 	"os"
 	"path/filepath"
 )
+
+//go:embed drTags.app
+var app embed.FS
+
+//https://github.com/RichardBronosky/AppleScript-droplet
 
 func install(oldname string, lnks ...string) {
 	adr, link := lnks[0], lnks[1]

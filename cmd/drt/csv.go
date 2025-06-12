@@ -99,7 +99,7 @@ func (t *Tags) timeLine(album, in, title, a string) {
 	timeline := a == "csv"
 	if timeline {
 		a, probes = probe(in, base, false)
-		fmt.Println(a, append(probes, probeA(res.Name(), true)...))
+		fmt.Println(append(probes, probeA(res.Name(), true)...))
 	}
 	lpcm := false
 	xlac := false
@@ -177,7 +177,7 @@ func (t *Tags) timeLine(album, in, title, a string) {
 		if err == nil {
 			if i > 0 {
 				a, probes = probe(filepath.Dir(args1), filepath.Base(args1), false)
-				fmt.Println(a, append(probes, probeA(res.Name(), true)...))
+				fmt.Println(append(probes, probeA(res.Name(), true)...))
 			}
 			source, ok := sources[args1]
 			if !ok {

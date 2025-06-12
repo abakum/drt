@@ -24,7 +24,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"embed"
 	_ "embed"
 	"encoding/csv"
 	"errors"
@@ -72,11 +71,6 @@ var _ = version.Ver
 
 //go:embed VERSION
 var VERSION string
-
-//go:embed drTags.app
-var app embed.FS
-
-//https://github.com/RichardBronosky/AppleScript-droplet
 
 func main() {
 	var (
@@ -229,7 +223,7 @@ func main() {
 		}
 
 		a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
-		fmt.Println(a, append(probes, probeA(file, true)...))
+		fmt.Println(append(probes, probeA(file, true)...))
 
 		source.album = album
 		source.title = title
@@ -304,7 +298,7 @@ func main() {
 			for _, file := range mapKeys(sources, false) {
 				source := sources[file]
 				a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
-				fmt.Println(a, append(probes, probeA(file, true)...))
+				fmt.Println(append(probes, probeA(file, true)...))
 				source.audio = a
 				source.tags.set("", tags)
 				source.tags.write(file)
@@ -317,8 +311,8 @@ func main() {
 						sources[mov] = sources[file]
 						delete(sources, file)
 						file = mov
-						a, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-						fmt.Println(a, append(probes, probeA(file, true)...))
+						_, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+						fmt.Println(append(probes, probeA(file, true)...))
 					} else {
 						args := []string{
 							"-hide_banner",
@@ -332,8 +326,8 @@ func main() {
 							sources[mov] = sources[file]
 							delete(sources, file)
 							file = mov
-							a, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-							fmt.Println(a, append(probes, probeA(file, true)...))
+							_, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+							fmt.Println(append(probes, probeA(file, true)...))
 						} else {
 							log.Println("Не удалось создать файл", mov, err, "код завершения", rs)
 						}

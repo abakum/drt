@@ -20,7 +20,4 @@ require (
 	github.com/jxeng/shortcut v1.0.2
 )
 
-require (
-	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20250301202403-da16c1255728 // indirect
-	github.com/go-ole/go-ole v1.2.6 // indirect
-)
+require github.com/go-ole/go-ole v1.2.6 // indirect
