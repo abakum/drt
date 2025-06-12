@@ -78,3 +78,5 @@ func install(oldname string, lnks ...string) {
 	log.Println(main, "~> /dev/null", os.Remove(main))
 	ln(oldname, main, true, false)
 }
+func evtp() {
+}

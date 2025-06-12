@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	markdown "github.com/MichaelMure/go-term-markdown"
+	"github.com/charmbracelet/glamour"
 	"golang.org/x/term"
 )
 
@@ -14,14 +14,23 @@ import (
 var README string
 
 func Print() {
-	w, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil {
-		for _, s := range strings.Split(README, "\n") {
-			if len(s) > w {
-				w = len(s)
-			}
+	i := 0
+	for _, s := range strings.Split(README, "\n") {
+		if len(s) > i {
+			i = len(s)
 		}
 	}
-	result := markdown.Render(README, w, 0)
-	fmt.Println(string(result))
+	w, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		w = i
+	}
+	r, _ := glamour.NewTermRenderer(
+		// detect background color and pick either the default dark or light theme
+		// glamour.WithAutoStyle(),
+		glamour.WithStandardStyle("dracula"),
+		// wrap output at specific width (default is 80)
+		glamour.WithWordWrap(w-2),
+	)
+	result, _ := r.Render(README)
+	fmt.Println(result)
 }

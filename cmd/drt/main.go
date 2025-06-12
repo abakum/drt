@@ -400,6 +400,7 @@ func oaet(args1 string) (out, album, ext, title string) {
 }
 
 func help() {
+	evtp()
 	readme.Print()
 	dr := drTags
 
