@@ -1,12 +1,10 @@
 package main
 
-//go install github.com/abakum/drt@main
+//go install github.com/abakum/drt/cmd/drt@main
 //go get github.com/cardinalby/xgo-pack@master
 //go install github.com/cardinalby/xgo-pack
 //xgo-pack init
-//#sudo apt install genisoimage
 //sudo rm -r dist/tmp
-//#sudo /home/koka/go/bin/xgo-pack build
 //xgo-pack build
 //goreleaser init
 //goreleaser release --snapshot --clean
@@ -37,6 +35,7 @@ import (
 	"slices"
 	"strings"
 
+	readme "github.com/abakum/drt"
 	version "github.com/abakum/version/lib"
 	"github.com/adrg/xdg"
 	"github.com/xlab/closer"
@@ -401,83 +400,7 @@ func oaet(args1 string) (out, album, ext, title string) {
 }
 
 func help() {
-	fmt.Print(`drt file [...fileN] [tag1=val1 [...tagN=valN]]
-Где file...fileN это медиафайлы или файлы .csv от DaVinci Resolve c Description или Keywords в которых указаны тэги.
-Если в файле "20220626 Концерт\14.csv" есть таймлайн
-"20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2" и клип с lpcm в
-"20220626 Концерт\20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.mov" 
-то после запуска "drt 14.csv" появятся файлы:
-"20220626 Концерт\20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.alac.mov"
-"20220626 Концерт\20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.flac"
-"20220626 Концерт\20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.mp3"
-или был клип с flac в
-"20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.mp4"
-то после запуска "drt 14.csv" появятся файлы:
-"20220626 Концерт\20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.flac"
-"20220626 Концерт\20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.mp3"
-с тэгами:
-Date=20220626
-Album=20220626 Концерт
-TrackNumber=14
-Composer=Прокофьев
-Title=Соната для фортепиано №2 ре минор
-MovementName=1
-MovementName=2
-Grouping=Фортепиано
-Grouping=Соната для фортепиано
-InitialKey=Dm
-Для знаков при ключе используется английская нотация где cи мажор как B, си-бемоль минор как Bbm, до-диез мажор как C#.
-В Description или Keywords таймлайна для классики можно указать:
-TitleSort=Тогда это строчка будет источником для тэгов а не имя файла
-Title=Соната для фортепиано №2
-Composer=Сергей Прокофьев
-Artist=Иван Петров
-AlbumArtist=Остальные исполнители кроме солиста
-Conductor=Руководители солиста или оркестра или концертмейстер
-Genre=Classical
-InvolvedPeople=Остальные люди например Перевертмейстер и группы причастные к выступлению например РГК им С. В. Рахманинова
-Lyricist=Авторы текста и переводчики
-Arranger=Авторы переложения или оранжировки
-Subtitle=Подзаголовок например Патетическая соната. Части имени в кавычках где Ё или парных ёлочкой или круглых скобок тоже попадут сюда.
-Work=Авторские публикации как Op.14 или каталоги как BWV и прочие
-Grouping=Группировки например для музыкальных форм как Соната для фортепиано или по инструментам
-Если тэг один а значений несколько просто повторяй строчки.
-Так пиши в Keywords или Description:
-Artist=Иван Петров
-Artist=Пётр Сидоров
-Или через / в Description:
-MovementName=1 Allegro ma non troppo/2 Scherzo Allegro marcato
-Или с новой строки в Description:
-Movement=1 Allegro ma non troppo
-2 Scherzo Allegro marcato
-Всё что в имени файла или в тэге TitleSort идёт после слова "часть" запишу в MovementName например если укажешь
-TitleSort=20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор часть 1 Allegro ma non troppo
-Всё что в имени файла или в тэге TitleSort идёт после слова "части" разделю по пробелам и запишу в MovementName
-Чтоб MovementName попало только 2 части объедини их _ например
-TitleSort=20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1_Allegro_ma_non_troppo 2_Scherzo_Allegro_marcato
-Также можно поступить и с композитором например указав TitleSort=20220626 Концерт 14 Сергей_Прокофьев Соната для фортепиано №2 ре минор
-запишу Composer=Сергей Прокофьев
-Если Comments таймлайна не пуст то он запишется в тэг Comment.
-Если в командной строке нет тэгов то их можно ввести в консоле.
-Если в консольном вводе строка не начинается с тэга то это значение к предыдущему тэгу:
-Artist=Иван Петров
-Пётр Сидоров
-Если в консольном вводе первая строка не начинается с тэга то это значение к тэгу Comment
-Завершай консольный ввод пустой строкой. Чтоб ввести пустую строку в Comment введи /
-Чтоб убрать все значение тэга X введи X=. Чтоб убрать значение всех тэгов введи =
-Если в видеофайле a.ext с mpegts ввести == то запишу a.ext.mov
-Если в видеофайле звук:
- - в pcm и ввести == то запишу .mp4 со звуком в alac, .flac, .mp3
- - в alac или flac и ввести == то запишу .flac, .mp3
- - иначе запишу a.mp3
-Если в аудиофайле звук:
- - в pcm в alac или flac и ввести == то запишу a.flac, a.mp3
- - иначе запишу a.mp3 если аудиофайл не .mp3
-
-Остальные тэги https://taglib.org/api/p_propertymapping.html
-Расширенно про mp3 https://id3.org/id3v2.3.0
-Страничка drTags https://github.com/abakum/drt
-`)
+	readme.Print()
 	dr := drTags
 
 	if len(xdg.ApplicationDirs) < 1 {
