@@ -568,7 +568,7 @@ func yes(s string) (ok bool) {
 }
 
 func ctrlC() {
-	gui := trimExt(filepath.Base(exe)) == drTags
+	gui := trimExt(filepath.Base(exe)) != drt
 	if win {
 		gui = !strings.HasPrefix(os.Environ()[0], "=")
 	}
