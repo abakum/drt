@@ -172,26 +172,24 @@ func (t *Tags) timeLine(album, in, title, a string) {
 		t.set("Из командной строки", newTags(etc...))
 	}
 
-	for i, args1 := range outs {
-		f, err := open(args1)
+	for i, file := range outs {
+		f, err := open(file)
 		if err == nil {
-			if i > 0 {
-				a, probes = probe(filepath.Dir(args1), filepath.Base(args1), false)
-				fmt.Println(append(probes, probeA(res.Name(), true)...))
-			}
-			source, ok := sources[args1]
+			source, ok := sources[file]
 			if !ok {
 				source = &ATT{}
 			}
 			source.album = album
 			source.title = title
 			source.out = i > 0
-			source.audio = a
-			sources[args1] = source
+			if i > 0 {
+				source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+				fmt.Println(append(probes, probeA(res.Name(), true)...))
+			}
+			sources[file] = source
 
-			t.write(args1)
-			sources[args1].tags = readTags(args1)
-			// sources[args1].tags.print(2, args1, false)
+			t.write(file)
+			sources[file].tags = readTags(file)
 
 			f.Close()
 		}

@@ -3,12 +3,14 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"fmt"
 	"io"
 	"io/fs"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -74,9 +76,33 @@ func install(oldname string, lnks ...string) {
 		fmt.Println(path, "~>", destPath)
 		return nil
 	})
-	main := filepath.Join(adr, "Contents", "Resources", "Scripts", "main")
-	log.Println(main, "~> /dev/null", os.Remove(main))
-	ln(oldname, main, true, false)
+	main := filepath.Join(adr, "Contents")
+	files := []string{filepath.Join(main, "MacOS", "droplet")}
+	main = filepath.Join(main, "Resources", "Scripts", "main")
+	files = append(files, main, main+".scpt")
+	// log.Println(main, "~> /dev/null", os.Remove(main))
+	// ln(oldname, main, true, false)
+	for _, f := range files {
+		log.Println("chmod +x", f, os.Chmod(f, 0755))
+	}
+
+	// open -b com.apple.ScriptEditor2 adr
+	// ## Set use_terminal to true to run the script in a terminal
+	// set use_terminal to true
+	// ## Set exit_terminal to false to leave the terminal session open after script runs
+	// set exit_terminal to true
+	// https://github.com/abbeycode/AppleScripts/blob/master/Services/Convert%20Script%20to%20Text.applescript
+	if _, err := exec.LookPath(drTags); err == nil {
+		return
+	}
+	data, err := os.ReadFile(main)
+	log.Println("Читаю скрипт", main, err)
+	if err != nil {
+		return
+	}
+	data = bytes.Replace(data, []byte(drTags), []byte(link), 1)
+	log.Println("Пишу скрипт", main, os.WriteFile(main, data, 0755))
 }
+
 func evtp() {
 }

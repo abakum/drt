@@ -62,6 +62,7 @@ var (
 	// .c
 	sources = make(map[string]*ATT) // Файлы источники и результатов
 	etc     = []string{}            // Тэги
+	probes  []string
 )
 
 var _ = version.Ver
@@ -221,16 +222,15 @@ func main() {
 			continue
 		}
 
-		a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
-		fmt.Println(append(probes, probeA(file, true)...))
-
 		source.album = album
 		source.title = title
-		source.tags = readTags(file)
-		source.tags.print(2, file, false)
-		source.audio = a
+		source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+		fmt.Println(append(probes, probeA(file, true)...))
 
-		source.tags.parse(album, title)
+		// source.tags = readTags(file)
+		// source.tags.print(2, file, false)
+		// source.tags.parse(album, title)
+		swrpp(file, source, nil)
 
 		if argsTags {
 			source.tags.set("Меняю", newTags(etc...))
@@ -275,9 +275,14 @@ func main() {
 				log.Println(e, ht[0])
 			}
 		}
-		fmt.Println("Пустая строка завершает ввод записью, ^С отменяет ввод. Введи тэг=значение:")
+		prompt := true
 		etc = nil
 		for {
+			if prompt {
+				fmt.Println("Пустая строка завершает ввод, ^С отменяет ввод")
+				fmt.Println("Введи == или потащи-и-брось файл или веди тэг=значение")
+			}
+			prompt = false
 			s, err := r.ReadString('\n')
 			if err != nil {
 				log.Println(err)
@@ -285,6 +290,23 @@ func main() {
 			}
 			s = strings.TrimSpace(s)
 			if s != "" {
+				file := strings.Trim(s, `"`)
+				if file != s {
+					f, err := open(file)
+					if err == nil {
+						f.Close()
+						if _, ok := sources[file]; !ok {
+							_, album, _, title := oaet(file)
+							source := &ATT{album, title, newTags(), false, ""}
+							source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+							fmt.Println(append(probes, probeA(file, true)...))
+							swrpp(file, source, nil)
+							sources[file] = source
+							prompt = true
+							continue
+						}
+					}
+				}
 				etc = append(etc, s)
 				continue
 			}
@@ -299,9 +321,7 @@ func main() {
 				a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
 				fmt.Println(append(probes, probeA(file, true)...))
 				source.audio = a
-				source.tags.set("", tags)
-				source.tags.write(file)
-				source.tags = readTags(file)
+				swrpp(file, source, tags)
 				// добавляет в sources
 				if slices.Contains(probes, "format_name=mpegts") {
 					mov := file + ".mov"
@@ -354,8 +374,10 @@ func main() {
 }
 
 func swrpp(file string, att *ATT, tags Tags) {
-	att.tags.set("", tags)
-	att.tags.write(file)
+	if tags != nil {
+		att.tags.set("", tags)
+		att.tags.write(file)
+	}
 
 	att.tags = readTags(file)
 	att.tags.print(2, file, false)

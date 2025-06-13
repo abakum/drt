@@ -2,11 +2,11 @@ module github.com/abakum/drt
 
 go 1.22.0
 
-replace golang.org/x/term v0.30.0 => golang.org/x/term v0.10.0
+replace golang.org/x/term => golang.org/x/term v0.10.0
 
-replace golang.org/x/text v0.23.0 => golang.org/x/text v0.20.0
+replace golang.org/x/text => golang.org/x/text v0.20.0
 
-replace golang.org/x/sys v0.31.0 => golang.org/x/sys v0.26.0
+replace golang.org/x/sys => golang.org/x/sys v0.26.0
 
 require (
 	codeberg.org/gruf/go-ffmpreg v0.6.7
