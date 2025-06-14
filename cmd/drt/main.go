@@ -38,6 +38,7 @@ import (
 	readme "github.com/abakum/drt"
 	version "github.com/abakum/version/lib"
 	"github.com/adrg/xdg"
+	"github.com/google/shlex"
 	"github.com/xlab/closer"
 	"golang.org/x/text/encoding/unicode"
 )
@@ -290,44 +291,70 @@ func main() {
 		}
 		etc = nil
 		prompt := `Пустая строка подтверждает ввод, ^С прерывает ввод.
-Введи имя файла или drag-n-drop или тэг=значение`
+Введи "имя файла" или drag-n-drop или тэг=значение`
 		fmt.Println(prompt)
 		eof := false
+	scan:
 		for eof = true; in.Scan(); eof = true {
 			eof = false
 			s := strings.TrimSpace(in.Text())
 			if s == "" {
 				break
 			}
-			file := strings.Trim(s, `"`)
-			file = strings.Trim(file, `'`)
-			f, err := open(file)
-			if err == nil {
-				// file
-				f.Close()
-				if _, ok := sources[file]; !ok {
-					out, album, ext, title := oaet(file)
-					source := &ATT{album, title, newTags(), false, ""}
-					sources[file] = source
-					if ext == dotCSV {
-						drCSV(album, out, file)
-					} else {
-						source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-						fmt.Println(append(probes, probeA(file, true)...))
-						swrpp(file, source, nil)
-					}
-					fmt.Println(prompt)
-					continue
-				}
-			} else if err.Error() == "isDir" {
-				// dir
-				dirs = append(dirs, s)
-				log.Println("Слежу за", dirs)
-				fmt.Println(prompt)
+			if !strings.Contains(s, `"`) && !strings.Contains(s, `'`) {
+				// tags
+				etc = append(etc, s)
 				continue
 			}
-			// tags
-			etc = append(etc, s)
+			// drag-n-drop?
+			files, err := shlex.Split(s)
+			// log.Println("drag-n-drop?", files, err)
+			if err != nil {
+				continue
+			}
+			for _, file := range files {
+				f, err := open(file)
+				if err == nil {
+					f.Close()
+				} else if err.Error() != "isDir" {
+					log.Println("медиафайл?", file)
+					fmt.Println(prompt)
+					continue scan
+				}
+			}
+			log.Println("drag-n-drop", files)
+			// drag-n-drop
+			for _, file := range files {
+				f, err := open(file)
+				if err == nil {
+					switch Ext(file) {
+					case dotCSV, dotMOV, dotMP4, dotFLAC, dotMP3:
+					default:
+						continue
+					}
+					// file
+					f.Close()
+					if _, ok := sources[file]; !ok {
+						out, album, ext, title := oaet(file)
+						source := &ATT{album, title, newTags(), false, ""}
+						sources[file] = source
+						if ext == dotCSV {
+							drCSV(album, out, file)
+						} else {
+							source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+							fmt.Println(append(probes, probeA(file, true)...))
+							swrpp(file, source, nil)
+						}
+					}
+				} else if err.Error() == "isDir" {
+					// dir
+					dirs = append(dirs, file)
+				}
+			}
+			if len(dirs) > 0 {
+				log.Println("Слежу за", dirs)
+			}
+			fmt.Println(prompt)
 		}
 		if in.Err() != nil || eof {
 			return
