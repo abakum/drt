@@ -26,7 +26,7 @@ func newRow(vals []string) *Row {
 	}
 	row := Row{head: make(map[string]int, len(vals))}
 	for k, v := range vals {
-		fmt.Println(k, v)
+		// log.Println(k, v)
 		row.head[v] = k
 	}
 	return &row
@@ -38,13 +38,6 @@ func (r Row) val(key string) (val string) {
 	}
 	return
 }
-
-// func (r Row) print(key string) (kv string) {
-// 	if val := r.val(key); val != "" {
-// 		kv = key + "=" + val
-// 	}
-// 	return
-// }
 
 func isFirstAfterSecond(first, second string) bool {
 	fi2, err := os.Stat(second)
@@ -59,7 +52,7 @@ func isFirstAfterSecond(first, second string) bool {
 }
 
 func (t *Tags) timeLine(album, in, title, a string) {
-	flacMp3 := ".mp3"
+	flacMp3 := dotMP3
 	if Ext(title) == flacMp3 {
 		log.Println(flacMp3)
 		return
@@ -68,17 +61,16 @@ func (t *Tags) timeLine(album, in, title, a string) {
 	if err == nil {
 		// Не csv
 		title = filepath.Base(title)
-		// title = strings.TrimSuffix(title, filepath.Ext(title))
 		title = trimExt(title)
 	}
 	var (
-		mp3    = title + flacMp3
+		mp3    = title + dotMP3
 		inMp3  = filepath.Join(in, mp3)
-		flac   = title + ".flac"
+		flac   = title + dotFLAC
 		inFlac = filepath.Join(in, flac)
-		mp4    = title + ".mp4"
+		mp4    = title + dotMP4
 		inMp4  = filepath.Join(in, mp4)
-		mov    = title + ".mov"
+		mov    = title + dotMOV
 		inMov  = filepath.Join(in, mov)
 		probes []string
 	)
@@ -96,7 +88,7 @@ func (t *Tags) timeLine(album, in, title, a string) {
 	defer res.Close()
 	// Заменяю!
 	base := filepath.Base(res.Name())
-	timeline := a == "csv"
+	timeline := a == dotCSV
 	if timeline {
 		a, probes = probe(in, base, false)
 		fmt.Println(append(probes, probeA(res.Name(), true)...))
@@ -165,7 +157,7 @@ func (t *Tags) timeLine(album, in, title, a string) {
 	}
 
 	if timeline {
-		t.print(2, title+".csv", false)
+		t.print(2, title+dotCSV, false)
 	}
 	t.parse(album, title)
 	if argsTags {

@@ -586,15 +586,20 @@ func open(name string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	if i.IsDir() || i.Size() == 0 {
-		return nil, errors.New("not media file")
+	if i.IsDir() {
+		f.Close()
+		return nil, errors.New("isDir")
+	}
+	if i.Size() == 0 {
+		f.Close()
+		return nil, errors.New("isEmpty")
 	}
 	return f, nil
 }
 
 func probeA(inFile string, asr bool) (lines []string) {
 	switch Ext(inFile) {
-	case ".mp3", ".flac", ".mov", ".3gp", "mp4", "m4a":
+	case dotMP3, dotFLAC, dotMOV, dotMP4, ".3gp", ".m4a":
 	default:
 		return
 	}
@@ -735,7 +740,7 @@ func LL(file string) (ok bool) {
 	att := sources[file]
 	if att == nil || att.audio == "" {
 		switch Ext(file) {
-		case ".wav", ".flac", ".ape", ".wv", ".dsf", ".dff", ".tak", ".tta", ".ofr":
+		case dotFLAC, ".wav", ".ape", ".wv", ".dsf", ".dff", ".tak", ".tta", ".ofr":
 			return true
 		}
 		return

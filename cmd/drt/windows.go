@@ -20,11 +20,11 @@ import (
 
 var (
 	met = map[string]string{
-		".csv":  "text/csv",
-		".mov":  "video/quicktime",
-		".mp4":  "video/mp4",
-		".flac": "audio/x-flac",
-		".mp3":  "audio/mpeg",
+		dotCSV:  "text/csv",
+		dotMOV:  "video/quicktime",
+		dotMP4:  "video/mp4",
+		dotFLAC: "audio/x-flac",
+		dotMP3:  "audio/mpeg",
 	}
 )
 

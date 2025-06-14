@@ -43,8 +43,13 @@ import (
 )
 
 const (
-	drt    = "drt"    // для консоли
-	drTags = "drTags" // для GUI
+	drt     = "drt"    // для консоли
+	drTags  = "drTags" // для GUI
+	dotCSV  = ".csv"
+	dotMOV  = ".mov"
+	dotMP4  = ".mp4"
+	dotMP3  = ".mp3"
+	dotFLAC = ".flac"
 )
 
 var (
@@ -63,6 +68,7 @@ var (
 	sources = make(map[string]*ATT) // Файлы источники и результатов
 	etc     = []string{}            // Тэги
 	probes  []string
+	in      = bufio.NewScanner(os.Stdin)
 )
 
 var _ = version.Ver
@@ -175,49 +181,59 @@ func main() {
 	switch {
 	case nautilus != "":
 		args = strings.Split(nautilus, "\n")
+		log.Println("nautilus", args)
 	case len(os.Args) > 1:
-		if os.Args[1] == "-" {
+		switch strings.ToLower(os.Args[1]) {
+		case "-":
+			//(echo a.mov&&echo comment=)|drt -
 			dash = true
-			bs, _ := os.ReadFile(os.Stdin.Name())
-			args = strings.Split(strings.TrimSpace(string(bs)), "\n")
-		} else {
+			for in.Scan() {
+				args = append(args, in.Text())
+			}
+			log.Println("drt -", args)
+		case "-h", "--help":
+			help()
+			return
+		default:
 			args = os.Args[1:]
 		}
-	default:
-		help()
-		return
 	}
 	//---------------------------------------------------------------------------
-	for _, args1 := range args {
-		args1, err := filepath.Abs(args1)
+	dirs := []string{}
+	for _, file := range args {
+		file, err := filepath.Abs(file)
 		if err != nil {
 			break
 		}
-		f, err := open(args1)
+		f, err := open(file)
 		if err != nil {
+			if err.Error() == "isDir" {
+				dirs = append(dirs, f.Name())
+				continue
+			}
 			break
 		}
 		f.Close()
-		if _, ok := sources[args1]; !ok {
-			sources[args1] = &ATT{}
+		if _, ok := sources[file]; !ok {
+			sources[file] = &ATT{}
 		}
 	}
-	if len(sources) < 1 {
-		help()
-		return
+	lenFD := len(sources) + len(dirs)
+	if len(args) > lenFD {
+		etc = args[lenFD:]
+		argsTags = strings.Contains(strings.Join(etc, " "), "=")
 	}
 
-	if len(args) > len(sources) {
-		etc = args[len(sources):]
+	if len(dirs) > 0 {
+		log.Println("Слежу за", dirs)
 	}
-	argsTags = strings.Contains(strings.Join(etc, " "), "=")
 
 	// Нельзя делать цикл по sources так как drCSV вызывает timeLine который добавляет в sources
 	for _, file := range mapKeys(sources, false) {
 		// Только источники
 		source := sources[file]
 		out, album, ext, title := oaet(file)
-		if ext == ".csv" {
+		if ext == dotCSV {
 			drCSV(album, out, file)
 			continue
 		}
@@ -226,10 +242,6 @@ func main() {
 		source.title = title
 		source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
 		fmt.Println(append(probes, probeA(file, true)...))
-
-		// source.tags = readTags(file)
-		// source.tags.print(2, file, false)
-		// source.tags.parse(album, title)
 		swrpp(file, source, nil)
 
 		if argsTags {
@@ -251,7 +263,9 @@ func main() {
 	)
 	log.Println(src)
 	for _, file := range mapKeys(sources, false) {
-		if Ext(file) == ".csv" {
+		out, album, ext, _ := oaet(file)
+		if ext == dotCSV {
+			drCSV(album, out, file)
 			continue
 		}
 		sources[file].tags.print(2, file, true)
@@ -263,54 +277,60 @@ func main() {
 			sources[file].tags.print(2, file, true)
 		}
 	}
-	r := bufio.NewReader(os.Stdin)
 	for {
 		// Выводим хэштэги
 		for _, file := range mapKeys(sources) {
 			e := Ext(file)
-			if e == ".csv" {
+			if e == dotCSV {
 				continue
 			}
 			if ht := sources[file].tags[HT]; len(ht) > 0 {
 				log.Println(e, ht[0])
 			}
 		}
-		prompt := true
 		etc = nil
-		for {
-			if prompt {
-				fmt.Println("Пустая строка завершает ввод, ^С отменяет ввод")
-				fmt.Println("Введи == или потащи-и-брось файл или веди тэг=значение")
+		prompt := `Пустая строка подтверждает ввод, ^С прерывает ввод.
+Введи имя файла или drag-n-drop или тэг=значение`
+		fmt.Println(prompt)
+		eof := false
+		for eof = true; in.Scan(); eof = true {
+			eof = false
+			s := strings.TrimSpace(in.Text())
+			if s == "" {
+				break
 			}
-			prompt = false
-			s, err := r.ReadString('\n')
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			s = strings.TrimSpace(s)
-			if s != "" {
-				file := strings.Trim(s, `"`)
-				if file != s {
-					f, err := open(file)
-					if err == nil {
-						f.Close()
-						if _, ok := sources[file]; !ok {
-							_, album, _, title := oaet(file)
-							source := &ATT{album, title, newTags(), false, ""}
-							source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-							fmt.Println(append(probes, probeA(file, true)...))
-							swrpp(file, source, nil)
-							sources[file] = source
-							prompt = true
-							continue
-						}
+			file := strings.Trim(s, `"`)
+			file = strings.Trim(file, `'`)
+			f, err := open(file)
+			if err == nil {
+				// file
+				f.Close()
+				if _, ok := sources[file]; !ok {
+					out, album, ext, title := oaet(file)
+					source := &ATT{album, title, newTags(), false, ""}
+					sources[file] = source
+					if ext == dotCSV {
+						drCSV(album, out, file)
+					} else {
+						source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+						fmt.Println(append(probes, probeA(file, true)...))
+						swrpp(file, source, nil)
 					}
+					fmt.Println(prompt)
+					continue
 				}
-				etc = append(etc, s)
+			} else if err.Error() == "isDir" {
+				// dir
+				dirs = append(dirs, s)
+				log.Println("Слежу за", dirs)
+				fmt.Println(prompt)
 				continue
 			}
-			break
+			// tags
+			etc = append(etc, s)
+		}
+		if in.Err() != nil || eof {
+			return
 		}
 		tags := newTags(etc...)
 		if _, ok := tags["=="]; ok {
@@ -324,7 +344,7 @@ func main() {
 				swrpp(file, source, tags)
 				// добавляет в sources
 				if slices.Contains(probes, "format_name=mpegts") {
-					mov := file + ".mov"
+					mov := file + dotMOV
 					if f, err := open(mov); err == nil {
 						f.Close()
 						sources[mov] = sources[file]
@@ -356,9 +376,18 @@ func main() {
 				}
 			}
 		}
+		if len(sources)+len(dirs) == 0 {
+			// help
+			break
+		}
+		if len(sources) == 0 {
+			continue
+		}
 		log.Println(src)
 		for _, file := range mapKeys(sources, false) {
-			if Ext(file) == ".csv" {
+			out, album, ext, _ := oaet(file)
+			if ext == dotCSV {
+				drCSV(album, out, file)
 				continue
 			}
 			swrpp(file, sources[file], tags)
@@ -371,6 +400,7 @@ func main() {
 			}
 		}
 	}
+	help()
 }
 
 func swrpp(file string, att *ATT, tags Tags) {
@@ -463,9 +493,9 @@ func help() {
 		install(oldname, adr, link)
 	case "windows":
 		install(oldname,
-			adr,
 			desktop,
 			filepath.Join(xdg.DataDirs[0], `Microsoft\Windows\SendTo`, dr),
+			adr,
 		)
 	case "linux":
 		sh := filepath.Join(xdg.DataHome, "nautilus/scripts", drTags)
@@ -501,12 +531,10 @@ func help() {
 func yes(s string) (ok bool) {
 	log.Output(3, s+"? y|yes|д|да")
 
-	r := bufio.NewReader(os.Stdin)
-	s, err := r.ReadString('\n')
-	if err != nil {
+	if !in.Scan() {
 		return
 	}
-	switch strings.ToLower(strings.TrimSpace(s)) {
+	switch strings.ToLower(strings.TrimSpace(in.Text())) {
 	case "y", "yes", "д", "да":
 		return true
 	}
@@ -564,7 +592,7 @@ func drCSV(album, out, args1 string) {
 			// timeLine
 			resTags := newTags()
 			resTags.csv(fileName, row, "Description", "Keywords", "Comments")
-			resTags.timeLine(album, out, fileName, "csv")
+			resTags.timeLine(album, out, fileName, dotCSV)
 			continue
 		}
 		// image := row.val("Duration TC") == "00:00:00:01"

@@ -4,11 +4,11 @@
 ```
 drt file [...fileN] [tag1=val1 [...tagN=valN]]
 ```
- - Где file...fileN это медиафайлы или файлы `.csv` от DaVinci Resolve c `Description` или `Keywords` в которых указаны тэги.
+ - Где file...fileN это медиафайлы или файлы `.csv` от DaVinci Resolve c `Description` или `Keywords` в которых указаны тэги или `-` если файлы и тэги передаются через конвейер `|` или пусто но не пусто `$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS`
  - Если в файле `20220626 Концерт\14.csv` есть таймлайн
 `20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2` и клип с `pcm` в
 `20220626 Концерт\20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.mov` 
-то после запуска
+то после запуска:
 ```
 drt 14.csv
 ```
@@ -19,7 +19,7 @@ drt 14.csv
 20220626 Концерт\20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.mp3
 ```
 или был клип с `flac` в `20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.mp4`
-то после запуска
+то после запуска:
 ```
 drt 14.csv
 ```
@@ -75,7 +75,7 @@ Movement=1 Allegro ma non troppo
 - Если строка не начинается с тэга то это значение к предыдущему тэгу
 - Всё что в таймлайне или в тэге `TitleSort` идёт после слова `часть` запишу в `MovementName` например если укажешь `TitleSort=20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор часть 1 Allegro ma non troppo` то `MovementName=1 Allegro ma non troppo`
 - Всё что в таймлайне или в тэге `TitleSort` идёт после слова `части` разделю по пробелам и запишу в `MovementName`. Чтоб в `MovementName` попало только 2 части объедини их `_` например
-`TitleSort=20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1_Allegro_ma_non_troppo 2_Scherzo_Allegro_marcato` запишу
+`TitleSort=20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1_Allegro_ma_non_troppo 2_Scherzo_Allegro_marcato` запишу:
 ```
 MovementName=1 Allegro ma non troppo
 MovementName=2 Scherzo Allegro marcato
@@ -104,8 +104,7 @@ MovementName=2 Scherzo Allegro marcato
 # Как получить drTags
 
 - [Установи go](https://go.dev/doc/install)
-- Запусти сборку `drt`
-
+- Запусти сборку `drt`:
 ```
 go install github.com/abakum/drt/cmd/drt@main
 ```
