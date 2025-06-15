@@ -38,7 +38,6 @@ import (
 	readme "github.com/abakum/drt"
 	version "github.com/abakum/version/lib"
 	"github.com/adrg/xdg"
-	"github.com/google/shlex"
 	"github.com/xlab/closer"
 	"golang.org/x/text/encoding/unicode"
 )
@@ -307,7 +306,7 @@ func main() {
 				continue
 			}
 			// drag-n-drop?
-			files, err := shlex.Split(s)
+			files, err := SplitCommandLine(s)
 			// log.Println("drag-n-drop?", files, err)
 			if err != nil {
 				continue

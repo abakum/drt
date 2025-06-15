@@ -167,6 +167,7 @@ func (t *Tags) timeLine(album, in, title, a string) {
 	for i, file := range outs {
 		f, err := open(file)
 		if err == nil {
+			f.Close()
 			source, ok := sources[file]
 			if !ok {
 				source = &ATT{}
@@ -181,9 +182,9 @@ func (t *Tags) timeLine(album, in, title, a string) {
 			sources[file] = source
 
 			t.write(file)
+
 			sources[file].tags = readTags(file)
 
-			f.Close()
 		}
 	}
 }

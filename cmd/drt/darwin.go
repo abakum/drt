@@ -12,6 +12,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/google/shlex"
 )
 
 //go:embed drTags.app
@@ -105,4 +107,8 @@ func install(oldname string, lnks ...string) {
 }
 
 func evtp() {
+}
+
+func SplitCommandLine(command string) ([]string, error) {
+	return shlex.Split(command)
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/abakum/go-taglib"
+	"github.com/bogem/id3v2/v2"
 )
 
 const (
@@ -56,9 +57,33 @@ func (t Tags) print(calldepth int, title string, slash bool) {
 	}
 }
 
-// Читаем из файла fName.
-func readTags(fName string) (tags Tags) {
-	tags, err := taglib.ReadTags(fName)
+func dateDash(t *Tags, dash bool) {
+	dates, _ := t.vals(taglib.Date)
+	d := ""
+	for _, date := range dates {
+		if len(date) > len(d) {
+			d = date
+		}
+	}
+	if d == "" {
+		return
+	}
+	d = strings.ReplaceAll(d, "-", "")
+	if dash {
+		if len(d) > 7 {
+			t.setVals(taglib.Date, d[:4]+"-"+d[4:6]+"-"+d[6:8])
+		}
+		return
+	}
+	t.setVals(taglib.Date, d)
+}
+
+// Читаем из файла file.
+func readTags(file string) (tags Tags) {
+	tags, err := taglib.ReadTags(file)
+
+	dateDash(&tags, false)
+
 	if err != nil {
 		log.Output(3, fmt.Sprintln("Ошибка чтения тэгов", err))
 	}
@@ -229,10 +254,10 @@ func removeNonAlphaNumSp(s string) string {
 	return re.ReplaceAllString(s, "")
 }
 
-func (t *Tags) write(args1 string) {
+func (t *Tags) write(file string) {
 	t.delEmpty()
 	uniq := make(map[string]bool) // отбросим повторения хэштэгов
-	if LL(args1) {
+	if LL(file) {
 		uniq["#LL"] = true
 	}
 	for key, vs := range *t {
@@ -287,21 +312,46 @@ func (t *Tags) write(args1 string) {
 		t.setVals(HT, strings.Join(hashTags, " "))
 	}
 
-	for _, key := range []string{DS, taglib.Comment} {
-		vals, ok := t.vals(key)
-		if ok {
-			t.setVals(key, strings.Join(vals, "\n"))
+	vals, comment := t.vals(taglib.Comment)
+	mp3 := Ext(file) == dotMP3
+	if comment {
+		// \n
+		t.setVals(taglib.Comment, vals...)
+		if mp3 {
+			// Пишет COMMENT и Comment:XXX
+			delete(*t, taglib.Comment)
 		}
 	}
+	dateDash(t, true)
 
 	if _, ok := t.vals(EC); ok {
 		t.setVals(EC, "drTags")
 	}
 
-	// t.print(3, "Пишу тэги в "+args1, false)
-	err := taglib.WriteTags(args1, *t, taglib.DiffBeforeWrite|taglib.Clear)
+	err := taglib.WriteTags(file, *t, taglib.DiffBeforeWrite|taglib.Clear)
 	if err != nil {
 		log.Println("Ошибка записи тэгов", err)
+	}
+
+	if !mp3 {
+		return
+	}
+	tag, err := id3v2.Open(file, id3v2.Options{Parse: true})
+	if err != nil {
+		log.Fatal("Ошибка чтения тэгов id3v2", err)
+	}
+	defer tag.Close()
+	if len(vals) > 0 {
+		comm := id3v2.CommentFrame{
+			Encoding: id3v2.EncodingUTF8,
+			Language: "XXX",
+			Text:     strings.Join(vals, "\n"),
+		}
+		tag.AddCommentFrame(comm)
+	}
+
+	if err = tag.Save(); err != nil {
+		log.Fatal("Ошибка записи тэгов id3v2", err)
 	}
 }
 
@@ -658,6 +708,7 @@ func (t *Tags) setVals(key string, vals ...string) {
 	}
 	vs := []string{}
 	for _, val := range vals {
+		val = strings.ReplaceAll(val, "\n", "/")
 		va := strings.Split(val, "/")
 		for _, v := range va {
 			v = strings.TrimSpace(v)
@@ -667,6 +718,10 @@ func (t *Tags) setVals(key string, vals ...string) {
 		}
 	}
 	// log.Println(key, vs)
+	if key == taglib.Comment {
+		(*t)[key] = []string{strings.Join(vs, "\n")}
+		return
+	}
 	(*t)[key] = vs
 	t.fixVal()
 }

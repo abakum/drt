@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/google/shlex"
 )
 
 var (
@@ -69,5 +71,10 @@ Categories=AudioVideo;AudioVideoEditing;
 Keywords=media info;metadata;tag;video;audio;codec;davinci;resolve;
 `), 0644))
 }
+
 func evtp() {
+}
+
+func SplitCommandLine(command string) ([]string, error) {
+	return shlex.Split(command)
 }

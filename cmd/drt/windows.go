@@ -319,3 +319,7 @@ func evtp() {
 	windows.GetConsoleMode(stdout, &originalMode)
 	windows.SetConsoleMode(stdout, originalMode|windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING)
 }
+
+func SplitCommandLine(command string) ([]string, error) {
+	return windows.DecomposeCommandLine(command)
+}

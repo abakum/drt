@@ -23,6 +23,7 @@ require (
 
 require (
 	github.com/abakum/version v0.1.4-lw
+	github.com/bogem/id3v2/v2 v2.1.4
 	github.com/charmbracelet/glamour v0.8.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/jxeng/shortcut v1.0.2
