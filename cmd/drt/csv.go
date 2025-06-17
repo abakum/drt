@@ -211,10 +211,12 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 			if i > 0 {
 				source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
 				fmt.Println(append(probes, probeA(res.Name(), true)...))
+			} else {
+				source.audio = a
 			}
 			source.parent = fileCSV
 			// sources[file] = source
-			// sources.Store(file, source)
+			sources.Store(file, source)
 
 			t.write(file)
 

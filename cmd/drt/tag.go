@@ -269,6 +269,9 @@ func (t *Tags) write(file string) {
 	if LL(file) {
 		uniq["#LL"] = true
 	}
+
+	dateDash(t, false)
+
 	for key, vs := range *t {
 		switch key {
 		case HT, EC, DS, taglib.Comment:
