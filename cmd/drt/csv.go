@@ -5,14 +5,16 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 type ATT struct {
-	album string
-	title string
-	tags  Tags
-	out   bool
-	audio string
+	album  string
+	title  string
+	tags   Tags
+	out    bool
+	audio  string
+	parent string
 }
 
 type Row struct {
@@ -51,7 +53,7 @@ func isFirstAfterSecond(first, second string) bool {
 	return false
 }
 
-func (t *Tags) timeLine(album, in, title, a string) {
+func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 	flacMp3 := dotMP3
 	if Ext(title) == flacMp3 {
 		log.Println(flacMp3)
@@ -75,30 +77,51 @@ func (t *Tags) timeLine(album, in, title, a string) {
 		probes []string
 	)
 	if err != nil {
+		// csv
+		if watcher != nil {
+			defer func() {
+				if !slices.Contains(watcher.WatchList(), in) {
+					err := watcher.Add(in)
+					if err != nil {
+						log.Println("Слежу за", in, err)
+					}
+				}
+			}()
+			if slices.Contains(watcher.WatchList(), in) {
+				err := watcher.Remove(in)
+				if err != nil {
+					log.Println("Не слежу за", in, err)
+				}
+			}
+		}
 		res, err = open(inMp4) //flac.mp4 alac.mp4
 		if err != nil {
-			res, err = open(inMov)
+			res, err = open(inMov) // pcm.mov
 			if err != nil {
-				log.Println("Нет результата в mp4 c flac или alac", inMp4)
-				log.Println("Нет результата в mov c lpcm", inMov)
+				log.Println("Жду mp4 c flac или alac", inMp4)
+				log.Println("Жду mov c pcm", inMov)
+				futures[inMp4] = fileCSV
+				futures[inMov] = fileCSV
 				return
 			}
 		}
+		futures[inMp4] = ""
+		futures[inMov] = ""
 	}
 	defer res.Close()
 	// Заменяю!
 	base := filepath.Base(res.Name())
-	timeline := a == dotCSV
+	timeline := fileCSV != ""
 	if timeline {
 		a, probes = probe(in, base, false)
 		fmt.Println(append(probes, probeA(res.Name(), true)...))
 	}
-	lpcm := false
+	pcm := false
 	xlac := false
 	outs := []string{res.Name()}
 	switch a {
 	case "pcm_f32le", "pcm_s16le", "pcm_s24le", "pcm_s32le":
-		lpcm = true
+		pcm = true
 		xlac = true
 		flacMp3 = ".mp4, .flac, .mp3"
 		outs = append(outs, inMp4, inFlac)
@@ -110,13 +133,13 @@ func (t *Tags) timeLine(album, in, title, a string) {
 	outs = append(outs, inMp3)
 	if isFirstAfterSecond(res.Name(), inMp3) ||
 		xlac && isFirstAfterSecond(res.Name(), inFlac) ||
-		lpcm && isFirstAfterSecond(res.Name(), inMp4) {
+		pcm && isFirstAfterSecond(res.Name(), inMp4) {
 		args := []string{
 			"-hide_banner",
 			"-v", "error",
 			"-i", base,
 		}
-		if lpcm {
+		if pcm {
 			args = append(args,
 				"-c:v", "copy", "-c:a", "alac", "-y", mp4,
 			)
@@ -144,10 +167,11 @@ func (t *Tags) timeLine(album, in, title, a string) {
 		log.Println(filepath.Ext(base), "~>", flacMp3)
 		rs, err := run(ctx, os.Stdout, "ffmpeg", in, args...)
 		if err == nil && rs == 0 {
-			if lpcm {
+			if pcm {
 				res.Close()
 				// log.Println(res.Name(), "~>", inMp4, os.Remove(res.Name()))
 				log.Println(res.Name(), "~>", inMp4)
+				defer delete(sources, res.Name())
 			}
 		} else {
 			log.Println("Не удалось создать файлы", flacMp3, err, "код завершения", rs)
@@ -163,7 +187,6 @@ func (t *Tags) timeLine(album, in, title, a string) {
 	if argsTags {
 		t.set("Из командной строки", newTags(etc...))
 	}
-
 	for i, file := range outs {
 		f, err := open(file)
 		if err == nil {
@@ -179,6 +202,7 @@ func (t *Tags) timeLine(album, in, title, a string) {
 				source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
 				fmt.Println(append(probes, probeA(res.Name(), true)...))
 			}
+			source.parent = fileCSV
 			sources[file] = source
 
 			t.write(file)

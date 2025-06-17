@@ -78,8 +78,17 @@ func dateDash(t *Tags, dash bool) {
 	t.setVals(taglib.Date, d)
 }
 
+func CanRead(absPath string) bool {
+	switch ext := strings.ToLower(filepath.Ext(absPath)); ext {
+	case ".mp3", ".flac", ".opus", ".aac", ".aiff", ".ape", ".m4a", ".m4b", ".mp2", ".mpc", ".oga", ".ogg", ".spx", ".tak", ".wav", ".wma", ".wv":
+		return true
+	}
+	return false
+}
+
 // Читаем из файла file.
 func readTags(file string) (tags Tags) {
+
 	tags, err := taglib.ReadTags(file)
 
 	dateDash(&tags, false)

@@ -34,10 +34,12 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	readme "github.com/abakum/drt"
 	version "github.com/abakum/version/lib"
 	"github.com/adrg/xdg"
+	"github.com/fsnotify/fsnotify"
 	"github.com/xlab/closer"
 	"golang.org/x/text/encoding/unicode"
 )
@@ -50,6 +52,8 @@ const (
 	dotMP4  = ".mp4"
 	dotMP3  = ".mp3"
 	dotFLAC = ".flac"
+	prompt  = `Пустая строка подтверждает ввод, ^С прерывает ввод.
+Введи "имя файла" или drag-n-drop или тэг=значение`
 )
 
 var (
@@ -67,8 +71,10 @@ var (
 	// .c
 	sources = make(map[string]*ATT) // Файлы источники и результатов
 	etc     = []string{}            // Тэги
-	probes  []string
+	probes  []string                // Свойства
 	in      = bufio.NewScanner(os.Stdin)
+	watcher *fsnotify.Watcher
+	futures = make(map[string]string) // Найти csv по mov mp4
 )
 
 var _ = version.Ver
@@ -208,7 +214,7 @@ func main() {
 		f, err := open(file)
 		if err != nil {
 			if err.Error() == "isDir" {
-				dirs = append(dirs, f.Name())
+				dirs = append(dirs, file)
 				continue
 			}
 			break
@@ -224,17 +230,15 @@ func main() {
 		argsTags = strings.Contains(strings.Join(etc, " "), "=")
 	}
 
-	if len(dirs) > 0 {
-		log.Println("Слежу за", dirs)
-	}
-
 	// Нельзя делать цикл по sources так как drCSV вызывает timeLine который добавляет в sources
 	for _, file := range mapKeys(sources, false) {
 		// Только источники
 		source := sources[file]
 		out, album, ext, title := oaet(file)
 		if ext == dotCSV {
-			drCSV(album, out, file)
+			if argsTags || len(etc) > 0 || dash {
+				drCSV(album, out, file)
+			}
 			continue
 		}
 
@@ -257,6 +261,186 @@ func main() {
 		return
 	}
 	// drt file
+	watcher, err = fsnotify.NewWatcher()
+	log.Println("Начал слежку", err)
+	if err == nil {
+		defer watcher.Close()
+
+		isEmpty := make(chan string, 1000)
+		notEmpty := make(chan string, 1000)
+		removed := make(chan string, 1000)
+
+		go func() {
+			// isEmpty
+
+			// Список проверяемых файлов
+			files := make(map[string]bool)
+
+			t := time.NewTimer(time.Second)
+			defer t.Stop()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case file, ok := <-removed:
+					if !ok {
+						return
+					}
+					delete(files, file)
+					log.Println("Обработан", file)
+				case file, ok := <-isEmpty:
+					if !ok {
+						return
+					}
+					if _, ok := files[file]; ok {
+						// дубликаты
+						continue
+					}
+					log.Println("Жду завершение записи", file)
+					files[file] = true
+					t.Reset(time.Second)
+				case <-t.C:
+					reset := false
+					for file, empty := range files {
+						if !empty {
+							continue
+						}
+						if f, err := open(file); err == nil {
+							f.Close()
+							files[file] = false
+							notEmpty <- file
+							continue
+						}
+						reset = true
+					}
+					if reset {
+						t.Reset(time.Second)
+					}
+				}
+			}
+		}()
+
+		go func() {
+			// notEmpty
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case file, ok := <-notEmpty:
+					if !ok {
+						return
+					}
+
+					fileCSV := ""
+					e := Ext(file)
+					switch e {
+					case dotMOV, dotMP4:
+						// Если изменился mov не реагирую на mp4
+						if e == dotMOV {
+							futures[trimExt(file)+dotMP4] = ""
+						}
+
+						if att, ok := sources[file]; ok && att != nil {
+							fileCSV = att.parent
+						}
+						if fileCSV == "" {
+							fileCSV = futures[file]
+						}
+						if fileCSV == "" {
+							continue
+						}
+						log.Println("Обрабатываю", file)
+					case dotCSV:
+						fileCSV = file
+					}
+					log.Println("Обрабатываю", fileCSV)
+					sources[fileCSV] = &ATT{}
+					out, album, _, _ := oaet(file)
+					drCSV(album, out, fileCSV)
+					removed <- file
+					for file, att := range sources {
+						if att.parent == fileCSV && att != nil && att.tags != nil {
+							swrpp(file, att, nil)
+						}
+					}
+					for file, att := range sources {
+						if att.parent == fileCSV && att != nil && att.tags != nil {
+							if ht := att.tags[HT]; len(ht) > 0 {
+								log.Println(Ext(file), ht[0])
+							}
+						}
+					}
+					fmt.Println(prompt)
+				}
+			}
+		}()
+
+		// Start listening for events.
+		go func() {
+			defer log.Println("Закончил слежку", watcher.WatchList())
+			for {
+				select {
+				case <-ctx.Done():
+					log.Println("Context Done")
+					return
+				case event, ok := <-watcher.Events:
+					if !ok {
+						log.Println("Events Done")
+						return
+					}
+					// Реагирую только на удаление и запись csv и зависимых от csv
+					e := Ext(event.Name)
+					switch e {
+					case dotMOV, dotMP4, dotCSV:
+						// log.Println(event.Op.String(), event.Name)
+						if event.Has(fsnotify.Remove) {
+							log.Println("Пропал", event.Name)
+							delete(sources, event.Name)
+							continue
+						}
+						if event.Has(fsnotify.Create) {
+							log.Println("Появился", event.Name)
+							continue
+						}
+						if !event.Has(fsnotify.Write) {
+							continue
+						}
+					default:
+						continue
+					}
+					fileCSV := ""
+					switch e {
+					case dotMOV, dotMP4:
+						// Интересны только файлы таймлайна
+						if att, ok := sources[event.Name]; ok && att != nil {
+							fileCSV = att.parent
+						}
+						if fileCSV == "" {
+							fileCSV = futures[event.Name]
+						}
+						if fileCSV == "" {
+							continue
+						}
+						fallthrough
+					case dotCSV:
+						isEmpty <- event.Name
+					}
+				case err, ok := <-watcher.Errors:
+					if !ok {
+						log.Println("Errors Done")
+						return
+					}
+					log.Println("Ошибка слежки", err)
+				}
+			}
+		}()
+		for _, file := range dirs {
+			log.Println("Слежу за", file, watcher.Add(file))
+		}
+		// log.Println("Слежу за", watcher.WatchList())
+	}
+
 	const (
 		src = "Исходные медиафайлы------------------------------"
 		trg = "Результирующие медиафайлы------------------------"
@@ -289,8 +473,6 @@ func main() {
 			}
 		}
 		etc = nil
-		prompt := `Пустая строка подтверждает ввод, ^С прерывает ввод.
-Введи "имя файла" или drag-n-drop или тэг=значение`
 		fmt.Println(prompt)
 		eof := false
 	scan:
@@ -335,7 +517,7 @@ func main() {
 					f.Close()
 					if _, ok := sources[file]; !ok {
 						out, album, ext, title := oaet(file)
-						source := &ATT{album, title, newTags(), false, ""}
+						source := &ATT{album, title, newTags(), false, "", ""}
 						sources[file] = source
 						if ext == dotCSV {
 							drCSV(album, out, file)
@@ -347,11 +529,16 @@ func main() {
 					}
 				} else if err.Error() == "isDir" {
 					// dir
-					dirs = append(dirs, file)
+					if watcher != nil {
+						err := watcher.Add(file)
+						if err != nil {
+							log.Println("Слежу за", file, err)
+						}
+					}
 				}
 			}
-			if len(dirs) > 0 {
-				log.Println("Слежу за", dirs)
+			if watcher != nil && len(watcher.WatchList()) > 0 {
+				log.Println("Слежу за", watcher.WatchList())
 			}
 			fmt.Println(prompt)
 		}
@@ -398,7 +585,7 @@ func main() {
 						}
 					}
 				} else {
-					source.tags.timeLine(source.album, filepath.Dir(file), file, a)
+					source.tags.timeLine(source.album, filepath.Dir(file), file, a, "")
 				}
 			}
 		}
@@ -579,8 +766,8 @@ func ctrlC() {
 	closer.Hold()
 }
 
-func drCSV(album, out, args1 string) {
-	f, err := open(args1)
+func drCSV(album, out, fileCSV string) {
+	f, err := open(fileCSV)
 	if err != nil {
 		log.Fatalln("Ошибка открытия", err)
 		return
@@ -618,7 +805,7 @@ func drCSV(album, out, args1 string) {
 			// timeLine
 			resTags := newTags()
 			resTags.csv(fileName, row, "Description", "Keywords", "Comments")
-			resTags.timeLine(album, out, fileName, dotCSV)
+			resTags.timeLine(album, out, fileName, "", fileCSV)
 			continue
 		}
 		// image := row.val("Duration TC") == "00:00:00:01"
