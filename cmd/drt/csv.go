@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 )
 
 type ATT struct {
@@ -100,15 +101,11 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 			if err != nil {
 				log.Println("Жду mp4 c flac или alac", inMp4)
 				log.Println("Жду mov c pcm", inMov)
-				// futures[inMp4] = fileCSV
-				// futures[inMov] = fileCSV
 				futures.Store(inMp4, fileCSV)
 				futures.Store(inMov, fileCSV)
 				return
 			}
 		}
-		// futures[inMp4] = ""
-		// futures[inMov] = ""
 		futures.Delete(inMp4)
 		futures.Delete(inMov)
 	}
@@ -177,7 +174,6 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 				res.Close()
 				// log.Println(res.Name(), "~>", inMp4, os.Remove(res.Name()))
 				log.Println(res.Name(), "~>", inMp4)
-				// defer delete(sources, res.Name())
 				defer sources.Delete(res.Name())
 			}
 		} else {
@@ -198,10 +194,6 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 		f, err := open(file)
 		if err == nil {
 			f.Close()
-			// source, ok := sources[file]
-			// if !ok {
-			// 	source = &ATT{}
-			// }
 			v, _ := sources.LoadOrStore(file, &ATT{})
 			source := v.(*ATT)
 
@@ -215,12 +207,14 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 				source.audio = a
 			}
 			source.parent = fileCSV
-			// sources[file] = source
 			sources.Store(file, source)
 
 			t.write(file)
+			if i > 0 {
+				now := time.Now()
+				os.Chtimes(file, now, now)
+			}
 
-			// sources[file].tags = readTags(file)
 			source.tags = readTags(file)
 			sources.Store(file, source)
 
