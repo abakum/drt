@@ -801,7 +801,9 @@ func (t *Tags) parse(album, file string) {
 }
 
 func LL(file string) (ok bool) {
-	att := sources[file]
+	// att := sources[file]
+	v, _ := sources.LoadOrStore(file, &ATT{})
+	att := v.(*ATT)
 	if att == nil || att.audio == "" {
 		switch Ext(file) {
 		case dotFLAC, ".wav", ".ape", ".wv", ".dsf", ".dff", ".tak", ".tta", ".ofr":

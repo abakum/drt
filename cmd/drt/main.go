@@ -34,6 +34,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	readme "github.com/abakum/drt"
@@ -69,12 +70,14 @@ var (
 	// a
 	ext string
 	// .c
-	sources = make(map[string]*ATT) // Файлы источники и результатов
-	etc     = []string{}            // Тэги
-	probes  []string                // Свойства
+	// sources = make(map[string]*ATT) // Файлы источники и результатов
+	sources sync.Map
+	etc     = []string{} // Тэги
+	probes  []string     // Свойства
 	in      = bufio.NewScanner(os.Stdin)
 	watcher *fsnotify.Watcher
-	futures = make(map[string]string) // Найти csv по mov mp4
+	// futures = make(map[string]string) // Найти csv по mov mp4
+	futures sync.Map
 )
 
 var _ = version.Ver
@@ -220,20 +223,31 @@ func main() {
 			break
 		}
 		f.Close()
-		if _, ok := sources[file]; !ok {
-			sources[file] = &ATT{}
-		}
+		// if _, ok := sources[file]; !ok {
+		// 	sources[file] = &ATT{}
+		// }
+		sources.Store(file, &ATT{})
 	}
-	lenFD := len(sources) + len(dirs)
+
+	lenFD := lenM(&sources) + len(dirs)
 	if len(args) > lenFD {
 		etc = args[lenFD:]
 		argsTags = strings.Contains(strings.Join(etc, " "), "=")
 	}
 
 	// Нельзя делать цикл по sources так как drCSV вызывает timeLine который добавляет в sources
-	for _, file := range mapKeys(sources, false) {
+	for _, file := range mapKeys(&sources, false) {
 		// Только источники
-		source := sources[file]
+		// source := sources[file]
+		v, ok := sources.Load(file)
+		if !ok {
+			continue
+		}
+		att := v.(*ATT)
+		if att == nil {
+			continue
+		}
+
 		out, album, ext, title := oaet(file)
 		if ext == dotCSV {
 			if argsTags || len(etc) > 0 || dash {
@@ -242,15 +256,15 @@ func main() {
 			continue
 		}
 
-		source.album = album
-		source.title = title
-		source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+		att.album = album
+		att.title = title
+		att.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
 		fmt.Println(append(probes, probeA(file, true)...))
-		swrpp(file, source, nil)
+		swrpp(file, att, nil)
 
 		if argsTags {
-			source.tags.set("Меняю", newTags(etc...))
-			source.tags.write(file)
+			att.tags.set("Меняю", newTags(etc...))
+			att.tags.write(file)
 			readTags(file).print(2, file, false)
 		}
 	}
@@ -274,7 +288,8 @@ func main() {
 			// isEmpty
 
 			// Список проверяемых файлов
-			files := make(map[string]bool)
+			// files := make(map[string]bool)
+			var files sync.Map
 
 			t := time.NewTimer(time.Second)
 			defer t.Stop()
@@ -287,33 +302,54 @@ func main() {
 					if !ok {
 						return
 					}
-					delete(files, file)
+					// delete(files, file)
+					files.Delete(file)
 					log.Println("Обработан", file)
 				case file, ok := <-isEmpty:
 					if !ok {
 						return
 					}
-					if _, ok := files[file]; ok {
+					// if _, ok := files[file]; ok {
+					if _, ok := files.Load(file); ok {
 						// дубликаты
 						continue
 					}
 					log.Println("Жду завершение записи", file)
-					files[file] = true
+					// files[file] = true
+					files.Store(file, true)
 					t.Reset(time.Second)
 				case <-t.C:
 					reset := false
-					for file, empty := range files {
+					// for file, empty := range files {
+					// 	if !empty {
+					// 		continue
+					// 	}
+					// 	if f, err := open(file); err == nil {
+					// 		f.Close()
+					// 		files[file] = false
+					// 		notEmpty <- file
+					// 		continue
+					// 	}
+					// 	reset = true
+					// }
+					files.Range(func(k, v any) (c bool) {
+						file := k.(string)
+						empty := v.(bool)
+						c = true
+
 						if !empty {
-							continue
+							return
 						}
 						if f, err := open(file); err == nil {
 							f.Close()
-							files[file] = false
+							// files[file] = false
+							files.Store(file, false)
 							notEmpty <- file
-							continue
+							return
 						}
 						reset = true
-					}
+						return
+					})
 					if reset {
 						t.Reset(time.Second)
 					}
@@ -338,14 +374,23 @@ func main() {
 					case dotMOV, dotMP4:
 						// Если изменился mov не реагирую на mp4
 						if e == dotMOV {
-							futures[trimExt(file)+dotMP4] = ""
+							// futures[trimExt(file)+dotMP4] = ""
+							futures.Delete(trimExt(file) + dotMP4)
 						}
 
-						if att, ok := sources[file]; ok && att != nil {
-							fileCSV = att.parent
+						// if v, ok := sources[file]; ok && v != nil {
+						// 	fileCSV = v.parent
+						// }
+						if v, ok := sources.Load(file); ok {
+							if source := v.(*ATT); source != nil {
+								fileCSV = source.parent
+							}
 						}
 						if fileCSV == "" {
-							fileCSV = futures[file]
+							// fileCSV = futures[file]
+							if v, ok := futures.Load(file); ok {
+								fileCSV = v.(string)
+							}
 						}
 						if fileCSV == "" {
 							continue
@@ -355,22 +400,41 @@ func main() {
 						fileCSV = file
 					}
 					log.Println("Обрабатываю", fileCSV)
-					sources[fileCSV] = &ATT{}
+					// sources[fileCSV] = &ATT{}
+					// sources.Store(fileCSV, &ATT{})
+					sources.LoadOrStore(fileCSV, &ATT{})
 					out, album, _, _ := oaet(file)
 					drCSV(album, out, fileCSV)
 					removed <- file
-					for file, att := range sources {
-						if att.parent == fileCSV && att != nil && att.tags != nil {
+					// for file, att := range sources {
+					// 	if att != nil && att.parent == fileCSV  {
+					// 		swrpp(file, att, nil)
+					// 	}
+					// }
+					sources.Range(func(key, value any) bool {
+						file, att := key.(string), value.(*ATT)
+						if att != nil && att.parent == fileCSV {
 							swrpp(file, att, nil)
 						}
-					}
-					for file, att := range sources {
-						if att.parent == fileCSV && att != nil && att.tags != nil {
+						return true
+					})
+
+					// for file, att := range sources {
+					// 	if att != nil && att.parent == fileCSV && att.tags != nil {
+					// 		if ht := att.tags[HT]; len(ht) > 0 {
+					// 			log.Println(Ext(file), ht[0])
+					// 		}
+					// 	}
+					// }
+					sources.Range(func(key, value any) bool {
+						file, att := key.(string), value.(*ATT)
+						if att != nil && att.parent == fileCSV && att.tags != nil {
 							if ht := att.tags[HT]; len(ht) > 0 {
 								log.Println(Ext(file), ht[0])
 							}
 						}
-					}
+						return true
+					})
 					fmt.Println(prompt)
 				}
 			}
@@ -396,7 +460,8 @@ func main() {
 						// log.Println(event.Op.String(), event.Name)
 						if event.Has(fsnotify.Remove) {
 							log.Println("Пропал", event.Name)
-							delete(sources, event.Name)
+							// delete(sources, event.Name)
+							sources.Delete(event.Name)
 							continue
 						}
 						if event.Has(fsnotify.Create) {
@@ -413,11 +478,21 @@ func main() {
 					switch e {
 					case dotMOV, dotMP4:
 						// Интересны только файлы таймлайна
-						if att, ok := sources[event.Name]; ok && att != nil {
-							fileCSV = att.parent
+						// if att, ok := sources[event.Name]; ok && att != nil {
+						// 	fileCSV = att.parent
+						// }
+
+						if v, ok := sources.Load(event.Name); ok {
+							att := v.(*ATT)
+							if att != nil {
+								fileCSV = att.parent
+							}
 						}
 						if fileCSV == "" {
-							fileCSV = futures[event.Name]
+							// fileCSV = futures[event.Name]
+							if v, ok := futures.Load(event.Name); ok {
+								fileCSV = v.(string)
+							}
 						}
 						if fileCSV == "" {
 							continue
@@ -446,29 +521,79 @@ func main() {
 		trg = "Результирующие медиафайлы------------------------"
 	)
 	log.Println(src)
-	for _, file := range mapKeys(sources, false) {
+	// for _, file := range mapKeys(sources, false) {
+	// 	out, album, ext, _ := oaet(file)
+	// 	if ext == dotCSV {
+	// 		drCSV(album, out, file)
+	// 		continue
+	// 	}
+	// 	sources[file].tags.print(2, file, true)
+	// }
+	for _, file := range mapKeys(&sources, false) {
 		out, album, ext, _ := oaet(file)
 		if ext == dotCSV {
 			drCSV(album, out, file)
 			continue
 		}
-		sources[file].tags.print(2, file, true)
+		v, ok := sources.Load(file)
+		if !ok {
+			continue
+		}
+		source := v.(*ATT)
+		if source == nil {
+			continue
+		}
+		source.tags.print(2, file, true)
 	}
-	results := mapKeys(sources, true)
+
+	// results := mapKeys(sources, true)
+	// if len(results) > 0 {
+	// 	log.Println(trg)
+	// 	for _, file := range results {
+	// 		sources[file].tags.print(2, file, true)
+	// 	}
+	// }
+	results := mapKeys(&sources, true)
 	if len(results) > 0 {
 		log.Println(trg)
 		for _, file := range results {
-			sources[file].tags.print(2, file, true)
+			v, ok := sources.Load(file)
+			if !ok {
+				continue
+			}
+			source := v.(*ATT)
+			if source == nil {
+				continue
+			}
+			source.tags.print(2, file, true)
 		}
 	}
+
 	for {
 		// Выводим хэштэги
-		for _, file := range mapKeys(sources) {
+		// for _, file := range mapKeys(sources) {
+		// 	e := Ext(file)
+		// 	if e == dotCSV {
+		// 		continue
+		// 	}
+		// 	if ht := sources[file].tags[HT]; len(ht) > 0 {
+		// 		log.Println(e, ht[0])
+		// 	}
+		// }
+		for _, file := range mapKeys(&sources) {
 			e := Ext(file)
 			if e == dotCSV {
 				continue
 			}
-			if ht := sources[file].tags[HT]; len(ht) > 0 {
+			v, ok := sources.Load(file)
+			if !ok {
+				continue
+			}
+			source := v.(*ATT)
+			if source == nil {
+				continue
+			}
+			if ht := source.tags[HT]; len(ht) > 0 {
 				log.Println(e, ht[0])
 			}
 		}
@@ -485,6 +610,11 @@ func main() {
 			if !strings.Contains(s, `"`) && !strings.Contains(s, `'`) {
 				// tags
 				etc = append(etc, s)
+				continue
+			}
+			if s == `""` || s == `''` {
+				log.Println("Очистил список исходных медиафайлов")
+				sources = *new(sync.Map)
 				continue
 			}
 			// drag-n-drop?
@@ -505,26 +635,44 @@ func main() {
 			}
 			log.Println("drag-n-drop", files)
 			// drag-n-drop
+			// once := true
 			for _, file := range files {
 				f, err := open(file)
 				if err == nil {
+					f.Close()
 					switch Ext(file) {
 					case dotCSV, dotMOV, dotMP4, dotFLAC, dotMP3:
 					default:
 						continue
 					}
 					// file
-					f.Close()
-					if _, ok := sources[file]; !ok {
+					// if _, ok := sources[file]; !ok {
+					// 	out, album, ext, title := oaet(file)
+					// 	source := &ATT{album, title, newTags(), false, "", ""}
+					// 	sources[file] = source
+					// 	if ext == dotCSV {
+					// 		drCSV(album, out, file)
+					// 	} else {
+					// 		source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+					// 		fmt.Println(append(probes, probeA(file, true)...))
+					// 		swrpp(file, source, nil)
+					// 	}
+					// }
+					// может очищать?
+					// if once {
+					// 	sources = *new(sync.Map)
+					// }
+					// once = false
+					if _, ok := sources.Load(file); !ok {
 						out, album, ext, title := oaet(file)
-						source := &ATT{album, title, newTags(), false, "", ""}
-						sources[file] = source
+						att := &ATT{album, title, newTags(), false, "", ""}
+						sources.Store(file, att)
 						if ext == dotCSV {
 							drCSV(album, out, file)
 						} else {
-							source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+							att.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
 							fmt.Println(append(probes, probeA(file, true)...))
-							swrpp(file, source, nil)
+							swrpp(file, att, nil)
 						}
 					}
 				} else if err.Error() == "isDir" {
@@ -549,19 +697,66 @@ func main() {
 		if _, ok := tags["=="]; ok {
 			delete(tags, "==")
 			// Нельзя делать цикл по sources так как timeLine добавляет в sources
-			for _, file := range mapKeys(sources, false) {
-				source := sources[file]
+			// for _, file := range mapKeys(sources, false) {
+			// 	source := sources[file]
+			// 	a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
+			// 	fmt.Println(append(probes, probeA(file, true)...))
+			// 	source.audio = a
+			// 	swrpp(file, source, tags)
+			// 	// добавляет в sources
+			// 	if slices.Contains(probes, "format_name=mpegts") {
+			// 		mov := file + dotMOV
+			// 		if f, err := open(mov); err == nil {
+			// 			f.Close()
+			// 			sources[mov] = sources[file]
+			// 			delete(sources, file)
+			// 			file = mov
+			// 			_, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+			// 			fmt.Println(append(probes, probeA(file, true)...))
+			// 		} else {
+			// 			args := []string{
+			// 				"-hide_banner",
+			// 				"-v", "error",
+			// 				"-i", filepath.Base(file),
+			// 				"-c", "copy", mov,
+			// 			}
+			// 			rs, err := run(ctx, os.Stdout, "ffmpeg", filepath.Dir(file), args...)
+			// 			if err == nil && rs == 0 {
+			// 				log.Println(file, "~>", mov)
+			// 				sources[mov] = sources[file]
+			// 				delete(sources, file)
+			// 				file = mov
+			// 				_, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+			// 				fmt.Println(append(probes, probeA(file, true)...))
+			// 			} else {
+			// 				log.Println("Не удалось создать файл", mov, err, "код завершения", rs)
+			// 			}
+			// 		}
+			// 	} else {
+			// 		source.tags.timeLine(source.album, filepath.Dir(file), file, a, "")
+			// 	}
+			// }
+			for _, file := range mapKeys(&sources, false) {
+				v, ok := sources.Load(file)
+				if !ok {
+					continue
+				}
+				att := v.(*ATT)
+				if att == nil {
+					continue
+				}
+
 				a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
 				fmt.Println(append(probes, probeA(file, true)...))
-				source.audio = a
-				swrpp(file, source, tags)
+				att.audio = a
+				swrpp(file, att, tags)
 				// добавляет в sources
 				if slices.Contains(probes, "format_name=mpegts") {
 					mov := file + dotMOV
 					if f, err := open(mov); err == nil {
 						f.Close()
-						sources[mov] = sources[file]
-						delete(sources, file)
+						sources.Store(mov, att)
+						sources.Delete(file)
 						file = mov
 						_, probes = probe(filepath.Dir(file), filepath.Base(file), false)
 						fmt.Println(append(probes, probeA(file, true)...))
@@ -575,8 +770,8 @@ func main() {
 						rs, err := run(ctx, os.Stdout, "ffmpeg", filepath.Dir(file), args...)
 						if err == nil && rs == 0 {
 							log.Println(file, "~>", mov)
-							sources[mov] = sources[file]
-							delete(sources, file)
+							sources.Store(mov, att)
+							sources.Delete(file)
 							file = mov
 							_, probes = probe(filepath.Dir(file), filepath.Base(file), false)
 							fmt.Println(append(probes, probeA(file, true)...))
@@ -585,31 +780,64 @@ func main() {
 						}
 					}
 				} else {
-					source.tags.timeLine(source.album, filepath.Dir(file), file, a, "")
+					att.tags.timeLine(att.album, filepath.Dir(file), file, a, "")
 				}
 			}
 		}
-		if len(sources)+len(dirs) == 0 {
+		// if len(sources)+len(dirs) == 0 {
+		if lenM(&sources)+len(dirs) == 0 {
 			// help
 			break
 		}
-		if len(sources) == 0 {
+		// if len(sources) == 0 {
+		if lenM(&sources) == 0 {
 			continue
 		}
 		log.Println(src)
-		for _, file := range mapKeys(sources, false) {
+		// for _, file := range mapKeys(sources, false) {
+		// 	out, album, ext, _ := oaet(file)
+		// 	if ext == dotCSV {
+		// 		drCSV(album, out, file)
+		// 		continue
+		// 	}
+		// 	swrpp(file, sources[file], tags)
+		// }
+		for _, file := range mapKeys(&sources, false) {
 			out, album, ext, _ := oaet(file)
 			if ext == dotCSV {
 				drCSV(album, out, file)
 				continue
 			}
-			swrpp(file, sources[file], tags)
+			v, ok := sources.Load(file)
+			if !ok {
+				continue
+			}
+			att := v.(*ATT)
+			if att == nil {
+				continue
+			}
+			swrpp(file, att, tags)
 		}
-		results := mapKeys(sources, true)
+		// results := mapKeys(sources, true)
+		// if len(results) > 0 {
+		// 	log.Println(trg)
+		// 	for _, file := range results {
+		// 		swrpp(file, sources[file], tags)
+		// 	}
+		// }
+		results := mapKeys(&sources, true)
 		if len(results) > 0 {
 			log.Println(trg)
 			for _, file := range results {
-				swrpp(file, sources[file], tags)
+				v, ok := sources.Load(file)
+				if !ok {
+					continue
+				}
+				att := v.(*ATT)
+				if att == nil {
+					continue
+				}
+				swrpp(file, att, tags)
 			}
 		}
 	}
@@ -628,7 +856,7 @@ func swrpp(file string, att *ATT, tags Tags) {
 }
 
 // Упорядочим цикл по m
-func mapKeys(m map[string]*ATT, out ...bool) (keys []string) {
+func mapKeys_(m map[string]*ATT, out ...bool) (keys []string) {
 	for k, v := range m {
 		if v == nil {
 			continue
@@ -640,6 +868,26 @@ func mapKeys(m map[string]*ATT, out ...bool) (keys []string) {
 		}
 		keys = append(keys, k)
 	}
+	slices.Sort(keys)
+	return
+}
+
+func mapKeys(m *sync.Map, out ...bool) (keys []string) {
+	m.Range(func(key any, value any) (c bool) {
+		k := key.(string)
+		v := value.(*ATT)
+		c = true
+		if v == nil {
+			return
+		}
+		if len(out) > 0 {
+			if out[0] != v.out {
+				return
+			}
+		}
+		keys = append(keys, k)
+		return
+	})
 	slices.Sort(keys)
 	return
 }
@@ -889,4 +1137,12 @@ set -o errexit
 		log.Println("Error write .sh:", err)
 	}
 	return
+}
+func lenM(m *sync.Map) int {
+	var count int
+	m.Range(func(k, v interface{}) bool {
+		count++
+		return true
+	})
+	return count
 }

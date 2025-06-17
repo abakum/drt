@@ -100,13 +100,17 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 			if err != nil {
 				log.Println("Жду mp4 c flac или alac", inMp4)
 				log.Println("Жду mov c pcm", inMov)
-				futures[inMp4] = fileCSV
-				futures[inMov] = fileCSV
+				// futures[inMp4] = fileCSV
+				// futures[inMov] = fileCSV
+				futures.Store(inMp4, fileCSV)
+				futures.Store(inMov, fileCSV)
 				return
 			}
 		}
-		futures[inMp4] = ""
-		futures[inMov] = ""
+		// futures[inMp4] = ""
+		// futures[inMov] = ""
+		futures.Delete(inMp4)
+		futures.Delete(inMov)
 	}
 	defer res.Close()
 	// Заменяю!
@@ -126,9 +130,11 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 		flacMp3 = ".mp4, .flac, .mp3"
 		outs = append(outs, inMp4, inFlac)
 	case "flac", "alac":
-		xlac = true
-		flacMp3 = ".flac, .mp3"
-		outs = append(outs, inFlac)
+		if inFlac != res.Name() {
+			xlac = true
+			flacMp3 = ".flac, .mp3"
+			outs = append(outs, inFlac)
+		}
 	}
 	outs = append(outs, inMp3)
 	if isFirstAfterSecond(res.Name(), inMp3) ||
@@ -171,7 +177,8 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 				res.Close()
 				// log.Println(res.Name(), "~>", inMp4, os.Remove(res.Name()))
 				log.Println(res.Name(), "~>", inMp4)
-				defer delete(sources, res.Name())
+				// defer delete(sources, res.Name())
+				defer sources.Delete(res.Name())
 			}
 		} else {
 			log.Println("Не удалось создать файлы", flacMp3, err, "код завершения", rs)
@@ -191,10 +198,13 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 		f, err := open(file)
 		if err == nil {
 			f.Close()
-			source, ok := sources[file]
-			if !ok {
-				source = &ATT{}
-			}
+			// source, ok := sources[file]
+			// if !ok {
+			// 	source = &ATT{}
+			// }
+			v, _ := sources.LoadOrStore(file, &ATT{})
+			source := v.(*ATT)
+
 			source.album = album
 			source.title = title
 			source.out = i > 0
@@ -203,11 +213,14 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 				fmt.Println(append(probes, probeA(res.Name(), true)...))
 			}
 			source.parent = fileCSV
-			sources[file] = source
+			// sources[file] = source
+			// sources.Store(file, source)
 
 			t.write(file)
 
-			sources[file].tags = readTags(file)
+			// sources[file].tags = readTags(file)
+			source.tags = readTags(file)
+			sources.Store(file, source)
 
 		}
 	}
