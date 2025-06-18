@@ -195,19 +195,19 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 		if err == nil {
 			f.Close()
 			v, _ := sources.LoadOrStore(file, &ATT{})
-			source := v.(*ATT)
+			att := v.(*ATT)
 
-			source.album = album
-			source.title = title
-			source.out = i > 0
+			att.album = album
+			att.title = title
+			att.out = i > 0
 			if i > 0 {
-				source.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
+				att.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
 				fmt.Println(append(probes, probeA(res.Name(), true)...))
 			} else {
-				source.audio = a
+				att.audio = a
 			}
-			source.parent = fileCSV
-			sources.Store(file, source)
+			att.parent = fileCSV
+			sources.Store(file, att)
 
 			t.write(file)
 			if i > 0 {
@@ -215,8 +215,8 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 				os.Chtimes(file, now, now)
 			}
 
-			source.tags = readTags(file)
-			sources.Store(file, source)
+			att.tags = readTags(file)
+			sources.Store(file, att)
 
 		}
 	}
