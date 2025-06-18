@@ -445,6 +445,7 @@ func main() {
 					// 	return true
 					// })
 					doCSV(fileCSV)
+					fmt.Println(prompt)
 				}
 			}
 		}()
@@ -566,6 +567,8 @@ func main() {
 
 	for {
 		printHT("*")
+		fmt.Println(prompt)
+
 		etc = nil
 		eof := false
 	scan:
@@ -1129,5 +1132,4 @@ func printHT(parent string) {
 			}
 		}
 	}
-	fmt.Println(prompt)
 }

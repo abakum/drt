@@ -274,11 +274,24 @@ func (t *Tags) write(file string) {
 
 	for key, vs := range *t {
 		switch key {
-		case HT, EC, DS, taglib.Comment:
+		case HT, EC, DS, taglib.Comment, taglib.TitleSort:
 			continue
 		}
 		for _, v := range vs {
 			name := removeFirstNonLatinCyrillic(v)
+
+			if key == taglib.MovementName {
+				// 1 ми мажор
+				// 10 ми минор
+				switch len(v) - len(name) {
+				case 2:
+					// m01 ми мажор
+					name = "m0" + v
+				case 3:
+					// m10 ми минор
+					name = "m" + v
+				}
+			}
 
 			if name == "" {
 				// Числа пригодятся
@@ -305,6 +318,8 @@ func (t *Tags) write(file string) {
 				}
 				continue
 			}
+			name = strings.Replace(name, "-диез", " диез", -1)     // ми-диез~>ми_диез
+			name = strings.Replace(name, "-бемоль", " бемоль", -1) // ми-бемоль~>ми_бемоль
 			if key == taglib.InitialKey {
 				name = strings.Replace(name, "#", "d", -1) // C#m~>Cdm
 			}
@@ -633,9 +648,25 @@ func (t *Tags) tGroup(title string) {
 		"квинтет":  "Квинтет",
 	}
 	fields := strings.Fields(strings.ToLower(title))
-	for _, field := range fields {
+	for i, field := range fields {
 		if v, ok := instruments[field]; ok {
 			t.addVals(taglib.Grouping, v)
+		}
+		if i > 0 {
+			switch field {
+			case "трио":
+				switch fields[i-1] {
+				case "фортепианное":
+					t.addVals(taglib.Grouping, "Скрипка", "Виолончель")
+				case "струнное":
+					t.addVals(taglib.Grouping, "Скрипка", "Альт", "Виолончель")
+				}
+			case "квартет", "квинтет":
+				switch fields[i-1] {
+				case "фортепианный", "струнный":
+					t.addVals(taglib.Grouping, "Скрипка", "Альт", "Виолончель")
+				}
+			}
 		}
 	}
 	ss := strings.Split(title, "№")
