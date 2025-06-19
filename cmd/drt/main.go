@@ -50,14 +50,20 @@ const (
 	drTags  = "drTags" // для GUI
 	dotCSV  = ".csv"
 	dotMOV  = ".mov"
+	dotMXF  = ".mxf"
+	dotAVI  = ".avi"
+	dotWAV  = ".wav"
+	dotAAC  = ".aac"
 	dotMP4  = ".mp4"
-	dotMP3  = ".mp3"
 	dotFLAC = ".flac"
+	dotMP3  = ".mp3"
 	prompt  = `Пустая строка подтверждает ввод, ^С прерывает ввод.
 Введи "имя файла" или drag-n-drop или тэг=значение`
 )
 
 var (
+	dots = []string{dotCSV, dotMOV, dotMXF, dotAVI, dotWAV, dotAAC, // результаты DR
+		dotMP4, dotFLAC, dotMP3} // Результаты drt - mp4 с alac
 	ctx      context.Context
 	cncl     context.CancelFunc
 	argsTags bool // Тэги в командной строке
@@ -252,17 +258,8 @@ func main() {
 		argsTags = strings.Contains(strings.Join(etc, " "), "=")
 	}
 
-	// Нельзя делать цикл по sources так как drCSV вызывает timeLine который добавляет в sources
 	for _, file := range mapKeys("*", false) {
 		// Только источники
-		// v, ok := sources.Load(file)
-		// if !ok {
-		// 	continue
-		// }
-		// att := v.(*ATT)
-		// if att == nil {
-		// 	continue
-		// }
 		att, _ := sourcesL(file)
 		if att == nil {
 			continue
@@ -337,28 +334,11 @@ func main() {
 						// дубликаты
 						continue
 					}
-					log.Println("Жду завершение записи", file)
+					log.Println("Жду", file)
 					files.Store(file, true)
 					t.Reset(time.Second)
 				case <-t.C:
 					reset := false
-					// files.Range(func(k, v any) (c bool) {
-					// 	file := k.(string)
-					// 	empty := v.(bool)
-					// 	c = true
-
-					// 	if !empty {
-					// 		return
-					// 	}
-					// 	if f, err := open(file); err == nil {
-					// 		f.Close()
-					// 		files.Store(file, false)
-					// 		notEmpty <- file
-					// 		return
-					// 	}
-					// 	reset = true
-					// 	return
-					// })
 					filesR(func(file string, empty bool) bool {
 						if !empty {
 							return true
@@ -393,57 +373,28 @@ func main() {
 					fileCSV := ""
 					e := Ext(file)
 					switch e {
-					case dotMOV, dotMP4:
-						// Если изменился mov не реагирую на mp4
-						if e == dotMOV {
-							futures.Delete(trimExt(file) + dotMP4)
-						}
-
-						// if v, ok := sources.Load(file); ok {
-						// 	if att := v.(*ATT); att != nil {
-						// 		fileCSV = att.parent
-						// 	}
-						// }
-
+					case dotCSV:
+						fileCSV = file
+					default:
 						if att, _ := sourcesL(file); att != nil {
 							fileCSV = att.parent
 						}
-
+						woe := trimExt(file)
 						if fileCSV == "" {
-							// if v, ok := futures.Load(file); ok {
-							// 	fileCSV = v.(string)
-							// }
-							fileCSV, _ = futuresL(file)
+							fileCSV, _ = futuresL(woe)
 						}
 						if fileCSV == "" {
 							continue
 						}
-						log.Println("Обрабатываю", file)
-					case dotCSV:
-						fileCSV = file
+
+						log.Println("Дождался", file)
+						futures.Delete(woe)
 					}
 					log.Println("Обрабатываю", fileCSV)
 					sources.LoadOrStore(fileCSV, &ATT{})
 					out, album, _, _ := oaet(fileCSV)
 					drCSV(album, out, fileCSV)
 					removed <- file
-					// sources.Range(func(key, value any) bool {
-					// 	file, att := key.(string), value.(*ATT)
-					// 	if att != nil && att.parent == fileCSV {
-					// 		swrpp(file, att, nil)
-					// 	}
-					// 	return true
-					// })
-
-					// sources.Range(func(key, value any) bool {
-					// 	file, att := key.(string), value.(*ATT)
-					// 	if att != nil && att.parent == fileCSV && att.tags != nil {
-					// 		if ht := att.tags[HT]; len(ht) > 0 {
-					// 			log.Println(Ext(file), ht[0])
-					// 		}
-					// 	}
-					// 	return true
-					// })
 					doCSV(fileCSV)
 					fmt.Println(prompt)
 				}
@@ -463,51 +414,39 @@ func main() {
 						log.Println("Events Done")
 						return
 					}
-					// Реагирую только на удаление и запись csv и зависимых от csv
+					// log.Println(event.Op.String(), event.Name)
 					e := Ext(event.Name)
-					switch e {
-					case dotMOV, dotMP4, dotCSV:
-						if event.Has(fsnotify.Remove) {
-							log.Println("Пропал", event.Name)
-							// sources.Delete(event.Name)
-							continue
-						}
-						if event.Has(fsnotify.Create) {
-							log.Println("Появился", event.Name)
-							continue
-						}
-						if !event.Has(fsnotify.Write) {
-							continue
-						}
-					default:
+					if event.Has(fsnotify.Remove) {
+						log.Println("Пропал", event.Name)
 						continue
 					}
-					fileCSV := ""
+					if event.Has(fsnotify.Create) {
+						log.Println("Появился", event.Name)
+					}
+					if !event.Has(fsnotify.Write) {
+						continue
+					}
 					switch e {
-					case dotMOV, dotMP4:
-						// Интересны только файлы таймлайна
-
-						// if v, ok := sources.Load(event.Name); ok {
-						// 	att := v.(*ATT)
-						// 	if att != nil {
-						// 		fileCSV = att.parent
-						// 	}
-						// }
+					case dotCSV:
+						// Любой csv
+						isEmpty <- event.Name
+					default:
+						// Остальные если это результаты
+						fileCSV := ""
 						if att, _ := sourcesL(event.Name); att != nil {
 							fileCSV = att.parent
 						}
+						// Или будущие результаты
 						if fileCSV == "" {
-							// if v, ok := futures.Load(event.Name); ok {
-							// 	fileCSV = v.(string)
-							// }
-							fileCSV, _ = futuresL(event.Name)
+							fileCSV, _ = futuresL(trimExt(event.Name))
 						}
-						if fileCSV == "" {
-							continue
+						if fileCSV != "" {
+							// Но csv должен уже быть
+							if f, err := open(fileCSV); err == nil {
+								f.Close()
+								isEmpty <- event.Name
+							}
 						}
-						fallthrough
-					case dotCSV:
-						isEmpty <- event.Name
 					}
 				case err, ok := <-watcher.Errors:
 					if !ok {
@@ -534,14 +473,6 @@ func main() {
 			drCSV(album, out, file)
 			continue
 		}
-		// v, ok := sources.Load(file)
-		// if !ok {
-		// 	continue
-		// }
-		// att := v.(*ATT)
-		// if att == nil {
-		// 	continue
-		// }
 		if att, _ := sourcesL(file); att != nil {
 			att.tags.print(2, file, true)
 		}
@@ -551,14 +482,6 @@ func main() {
 	if len(results) > 0 {
 		log.Println(trg)
 		for _, file := range results {
-			// v, ok := sources.Load(file)
-			// if !ok {
-			// 	continue
-			// }
-			// att := v.(*ATT)
-			// if att == nil {
-			// 	continue
-			// }
 			if att, _ := sourcesL(file); att != nil {
 				att.tags.print(2, file, true)
 			}
@@ -657,13 +580,7 @@ func main() {
 		tags := newTags(etc...)
 		if _, ok := tags["=="]; ok {
 			delete(tags, "==")
-			// Нельзя делать цикл по sources так как timeLine добавляет в sources
 			for _, file := range mapKeys("*", false) {
-				// v, ok := sources.Load(file)
-				// if !ok {
-				// 	continue
-				// }
-				// att := v.(*ATT)
 				att, _ := sourcesL(file)
 				if att == nil {
 					continue
@@ -721,14 +638,6 @@ func main() {
 				drCSV(album, out, file)
 				continue
 			}
-			// v, ok := sources.Load(file)
-			// if !ok {
-			// 	continue
-			// }
-			// att := v.(*ATT)
-			// if att == nil {
-			// 	continue
-			// }
 			att, _ := sourcesL(file)
 			swrpp(file, att, tags)
 		}
@@ -736,14 +645,6 @@ func main() {
 		if len(results) > 0 {
 			log.Println(trg)
 			for _, file := range results {
-				// v, ok := sources.Load(file)
-				// if !ok {
-				// 	continue
-				// }
-				// att := v.(*ATT)
-				// if att == nil {
-				// 	continue
-				// }
 				att, _ := sourcesL(file)
 				swrpp(file, att, tags)
 			}
@@ -774,21 +675,6 @@ func swrpp(file string, att *ATT, tags Tags) {
 // parent==att.parent
 func mapKeys(parent string, out ...bool) (keys []string) {
 	var all []string
-	// sources.Range(func(key any, value any) (c bool) {
-	// 	k := key.(string)
-	// 	v := value.(*ATT)
-	// 	c = true
-	// 	if v == nil {
-	// 		return
-	// 	}
-	// 	if len(out) > 0 {
-	// 		if out[0] != v.out {
-	// 			return
-	// 		}
-	// 	}
-	// 	all = append(all, k)
-	// 	return
-	// })
 	sourcesR(func(file string, att *ATT) bool {
 		if att == nil {
 			return true
@@ -805,28 +691,11 @@ func mapKeys(parent string, out ...bool) (keys []string) {
 		return true
 	})
 	slices.Sort(all)
-	for _, key := range all {
-		switch Ext(key) {
-		case dotMP3:
-		case dotFLAC:
-		default:
-			keys = append(keys, key)
-		}
-	}
-	for _, key := range all {
-		switch Ext(key) {
-		case dotMP3:
-		case dotFLAC:
-			keys = append(keys, key)
-		default:
-		}
-	}
-	for _, key := range all {
-		switch Ext(key) {
-		case dotMP3:
-			keys = append(keys, key)
-		case dotFLAC:
-		default:
+	for _, e := range dots {
+		for _, key := range all {
+			if Ext(key) == e {
+				keys = append(keys, key)
+			}
 		}
 	}
 
@@ -1082,36 +951,17 @@ set -o errexit
 func lenM(m *sync.Map) int {
 	var count int
 	m.Range(func(k, v interface{}) bool {
+		// log.Println(k, v)
 		count++
 		return true
 	})
 	return count
 }
 
-// func doCSV_(f func(file string, att *ATT) bool) {
-// 	sources.Range(func(key, value any) bool {
-// 		file, att := key.(string), value.(*ATT)
-// 		if att != nil && f(file, att) {
-// 			swrpp(file, att, nil)
-// 		}
-// 		return true
-// 	})
-
-// 	sources.Range(func(key, value any) bool {
-// 		file, att := key.(string), value.(*ATT)
-// 		if att != nil && att.tags != nil && f(file, att) {
-// 			if ht := att.tags[HT]; len(ht) > 0 {
-// 				log.Println(Ext(file), ht[0])
-// 			}
-// 		}
-// 		return true
-// 	})
-// 	fmt.Println(prompt)
-// }
-
 func doCSV(parent string) {
 	sourcesR(func(file string, att *ATT) bool {
 		if att != nil && att.parent == parent {
+			// log.Println(file, att)
 			swrpp(file, att, nil)
 		}
 		return true
@@ -1120,13 +970,16 @@ func doCSV(parent string) {
 	printHT(parent)
 }
 
+// Вывожу хэштэги фильтр по parent.
+// Если "*" не вывожу csv.
 func printHT(parent string) {
 	for _, file := range mapKeys(parent) {
+		// log.Println(file)
 		e := Ext(file)
-		if e == dotCSV {
+		if e == dotCSV && parent == "*" {
 			continue
 		}
-		if att, _ := sourcesL(file); att != nil && att.tags != nil {
+		if att, _ := sourcesL(file); att != nil && att.tags != nil && (parent == "*" || parent == att.parent) {
 			if ht := att.tags[HT]; len(ht) > 0 {
 				log.Println(e, ht[0])
 			}

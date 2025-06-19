@@ -55,28 +55,27 @@ func isFirstAfterSecond(first, second string) bool {
 }
 
 func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
-	flacMp3 := dotMP3
-	if Ext(title) == flacMp3 {
-		log.Println(flacMp3)
-		return
-	}
+	var (
+		probes []string
+	)
+
+	// flacMp3 := dotMP3
+	// if Ext(title) == flacMp3 {
+	// 	log.Println(flacMp3)
+	// 	return
+	// }
 	res, err := open(title)
 	if err == nil {
 		// Не csv
 		title = filepath.Base(title)
 		title = trimExt(title)
 	}
-	var (
-		mp3    = title + dotMP3
-		inMp3  = filepath.Join(in, mp3)
-		flac   = title + dotFLAC
-		inFlac = filepath.Join(in, flac)
-		mp4    = title + dotMP4
-		inMp4  = filepath.Join(in, mp4)
-		mov    = title + dotMOV
-		inMov  = filepath.Join(in, mov)
-		probes []string
-	)
+	b := func(e string) string {
+		return title + e
+	}
+	p := func(e string) string {
+		return filepath.Join(in, b(e))
+	}
 	if err != nil {
 		// csv
 		if watcher != nil {
@@ -95,92 +94,107 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 				}
 			}
 		}
-		res, err = open(inMp4) //flac.mp4 alac.mp4
-		if err != nil {
-			res, err = open(inMov) // pcm.mov
-			if err != nil {
-				log.Println("Жду mp4 c flac или alac", inMp4)
-				log.Println("Жду mov c pcm", inMov)
-				futures.Store(inMp4, fileCSV)
-				futures.Store(inMov, fileCSV)
-				return
+		for _, e := range dots {
+			res, err = open(p(e))
+			if err == nil {
+				break
 			}
 		}
-		futures.Delete(inMp4)
-		futures.Delete(inMov)
+		if err != nil {
+			// for _, e := range dots {
+			// 	log.Println("Жду", p(e))
+			// }
+			log.Println("Жду появления", p(".*"))
+			futures.Store(p(""), fileCSV)
+			// log.Println(lenM(&futures))
+			return
+		} else {
+			futures.Delete(p(""))
+			// log.Println(lenM(&futures))
+		}
 	}
-	defer res.Close()
+	resName := res.Name()
+	res.Close()
 	// Заменяю!
-	base := filepath.Base(res.Name())
+	base := filepath.Base(resName)
 	timeline := fileCSV != ""
 	if timeline {
 		a, probes = probe(in, base, false)
-		fmt.Println(append(probes, probeA(res.Name(), true)...))
+		fmt.Println(append(probes, probeA(resName, true)...))
 	}
 	pcm := false
 	xlac := false
-	outs := []string{res.Name()}
+	outs := []string{resName}
 	switch a {
 	case "pcm_f32le", "pcm_s16le", "pcm_s24le", "pcm_s32le":
 		pcm = true
 		xlac = true
-		flacMp3 = ".mp4, .flac, .mp3"
-		outs = append(outs, inMp4, inFlac)
+		// flacMp3 = ".mp4, .flac, .mp3"
+		outs = append(outs, p(dotMP4), p(dotFLAC))
 	case "flac", "alac":
-		if inFlac != res.Name() {
+		if p(dotFLAC) != resName {
 			xlac = true
-			flacMp3 = ".flac, .mp3"
-			outs = append(outs, inFlac)
+			// flacMp3 = ".flac, .mp3"
+			outs = append(outs, p(dotFLAC))
 		}
 	}
-	outs = append(outs, inMp3)
-	if isFirstAfterSecond(res.Name(), inMp3) ||
-		xlac && isFirstAfterSecond(res.Name(), inFlac) ||
-		pcm && isFirstAfterSecond(res.Name(), inMp4) {
-		args := []string{
-			"-hide_banner",
-			"-v", "error",
-			"-i", base,
+	if p(dotMP3) != resName {
+		outs = append(outs, p(dotMP3))
+	}
+
+	if len(outs) > 1 {
+		exts := []string{}
+		for _, file := range outs[1:] {
+			exts = append(exts, Ext(file))
 		}
-		if pcm {
-			args = append(args,
-				"-c:v", "copy", "-c:a", "alac", "-y", mp4,
-			)
-		}
-		if xlac {
-			if a == "flac" {
+		if isFirstAfterSecond(resName, p(dotMP3)) ||
+			xlac && isFirstAfterSecond(resName, p(dotFLAC)) ||
+			pcm && isFirstAfterSecond(resName, p(dotMP4)) {
+			args := []string{
+				"-hide_banner",
+				"-v", "error",
+				"-i", base,
+			}
+			if pcm {
 				args = append(args,
-					"-vn", "-c:a", "copy", "-y", flac,
+					"-c:v", "copy", "-c:a", "alac", "-y", b(dotMP4),
+				)
+			}
+			if xlac {
+				if a == "flac" {
+					args = append(args,
+						"-vn", "-c:a", "copy", "-y", b(dotFLAC),
+					)
+				} else {
+					args = append(args,
+						"-vn", "-compression_level", "12", "-y", b(dotFLAC),
+					)
+				}
+			}
+			if a == "mp3" {
+				args = append(args,
+					"-vn", "-c:a", "copy", "-y", b(dotMP3),
 				)
 			} else {
 				args = append(args,
-					"-vn", "-compression_level", "12", "-y", flac,
+					"-vn", "-q", "0", "-joint_stereo", "0", "-y", b(dotMP3),
 				)
 			}
-		}
-		if a == "mp3" {
-			args = append(args,
-				"-vn", "-c:a", "copy", "-y", mp3,
-			)
-		} else {
-			args = append(args,
-				"-vn", "-q", "0", "-joint_stereo", "0", "-y", mp3,
-			)
-		}
-		log.Println(filepath.Ext(base), "~>", flacMp3)
-		rs, err := run(ctx, os.Stdout, "ffmpeg", in, args...)
-		if err == nil && rs == 0 {
-			if pcm {
-				res.Close()
-				// log.Println(res.Name(), "~>", inMp4, os.Remove(res.Name()))
-				log.Println(res.Name(), "~>", inMp4)
-				defer sources.Delete(res.Name())
+			log.Println(filepath.Ext(base), "~>", exts)
+			rs, err := run(ctx, os.Stdout, "ffmpeg", in, args...)
+			if err == nil && rs == 0 {
+				if pcm {
+					// res.Close()
+					// log.Println(res.Name(), "~>", p(dotMP4), os.Remove(res.Name()))
+					log.Println(resName, "~>", p(dotMP4))
+					defer sources.Delete(resName)
+				}
+			} else {
+				log.Println("Не удалось создать файлы", exts, err, "код завершения", rs)
 			}
 		} else {
-			log.Println("Не удалось создать файлы", flacMp3, err, "код завершения", rs)
+			log.Println("Файлы", exts, "моложе чем", resName)
 		}
-	} else {
-		log.Println("Файлы", flacMp3, "моложе чем", res.Name())
 	}
 
 	if timeline {
@@ -202,7 +216,7 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 			att.out = i > 0
 			if i > 0 {
 				att.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-				fmt.Println(append(probes, probeA(res.Name(), true)...))
+				fmt.Println(append(probes, probeA(resName, true)...))
 			} else {
 				att.audio = a
 			}
