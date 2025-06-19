@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -345,6 +346,20 @@ func main() {
 						}
 						if f, err := open(file); err == nil {
 							f.Close()
+							if Ext(file) == dotFLAC {
+								fileXXXXXXXX := file
+								file = fixDRflac(file)
+								if file != fileXXXXXXXX {
+									log.Println("DR вместо", filepath.Base(file), "пишет", filepath.Base(fileXXXXXXXX))
+									err := os.Rename(fileXXXXXXXX, file)
+									log.Println(filepath.Base(fileXXXXXXXX), "~>", filepath.Base(file), err)
+									if err == nil {
+										files.Delete(fileXXXXXXXX)
+									} else {
+										file = fileXXXXXXXX
+									}
+								}
+							}
 							files.Store(file, false)
 							notEmpty <- file
 							return true
@@ -371,8 +386,7 @@ func main() {
 					}
 
 					fileCSV := ""
-					e := Ext(file)
-					switch e {
+					switch Ext(file) {
 					case dotCSV:
 						fileCSV = file
 					default:
@@ -390,6 +404,7 @@ func main() {
 						log.Println("Дождался", file)
 						futures.Delete(woe)
 					}
+					// time.Sleep(time.Second)
 					log.Println("Обрабатываю", fileCSV)
 					sources.LoadOrStore(fileCSV, &ATT{})
 					out, album, _, _ := oaet(fileCSV)
@@ -414,31 +429,35 @@ func main() {
 						log.Println("Events Done")
 						return
 					}
-					// log.Println(event.Op.String(), event.Name)
-					e := Ext(event.Name)
+					file := event.Name
+					// log.Println(event.Op.String(), file)
+					e := Ext(file)
 					if event.Has(fsnotify.Remove) {
-						log.Println("Пропал", event.Name)
+						log.Println("Пропал", file)
 						continue
 					}
+					// }
 					if event.Has(fsnotify.Create) {
-						log.Println("Появился", event.Name)
-					}
-					if !event.Has(fsnotify.Write) {
+						log.Println("Появился", file)
+					} else if !event.Has(fsnotify.Write) {
 						continue
 					}
 					switch e {
 					case dotCSV:
 						// Любой csv
-						isEmpty <- event.Name
+						isEmpty <- file
+					case dotFLAC:
+						file = fixDRflac(file)
+						fallthrough
 					default:
 						// Остальные если это результаты
 						fileCSV := ""
-						if att, _ := sourcesL(event.Name); att != nil {
+						if att, _ := sourcesL(file); att != nil {
 							fileCSV = att.parent
 						}
 						// Или будущие результаты
 						if fileCSV == "" {
-							fileCSV, _ = futuresL(trimExt(event.Name))
+							fileCSV, _ = futuresL(trimExt(file))
 						}
 						if fileCSV != "" {
 							// Но csv должен уже быть
@@ -985,4 +1004,10 @@ func printHT(parent string) {
 			}
 		}
 	}
+}
+
+// DR вместо bar.flac пишет bar00047491.flac
+func fixDRflac(file string) string {
+	re := regexp.MustCompile(fmt.Sprintf(`(\D|^)(\d{8})(\%s)`, dotFLAC))
+	return re.ReplaceAllString(file, "${1}${3}")
 }

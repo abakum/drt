@@ -117,6 +117,7 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 	res.Close()
 	// Заменяю!
 	base := filepath.Base(resName)
+	e := Ext(resName)
 	timeline := fileCSV != ""
 	if timeline {
 		a, probes = probe(in, base, false)
@@ -127,18 +128,21 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 	outs := []string{resName}
 	switch a {
 	case "pcm_f32le", "pcm_s16le", "pcm_s24le", "pcm_s32le":
-		pcm = true
 		xlac = true
-		// flacMp3 = ".mp4, .flac, .mp3"
-		outs = append(outs, p(dotMP4), p(dotFLAC))
+		switch e {
+		case dotMOV, dotMXF, dotAVI:
+			pcm = true
+			outs = append(outs, p(dotMP4), p(dotFLAC))
+		default:
+			outs = append(outs, p(dotFLAC))
+		}
 	case "flac", "alac":
-		if p(dotFLAC) != resName {
+		if e != dotFLAC {
 			xlac = true
-			// flacMp3 = ".flac, .mp3"
 			outs = append(outs, p(dotFLAC))
 		}
 	}
-	if p(dotMP3) != resName {
+	if e != dotMP3 {
 		outs = append(outs, p(dotMP3))
 	}
 

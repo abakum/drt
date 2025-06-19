@@ -360,12 +360,12 @@ func (t *Tags) write(file string) {
 		log.Println("Ошибка записи тэгов", err)
 	}
 
-	if !mp3 {
+	if !(mp3 && comment) {
 		return
 	}
 	tag, err := id3v2.Open(file, id3v2.Options{Parse: true})
 	if err != nil {
-		log.Fatal("Ошибка чтения тэгов id3v2", err)
+		log.Println("Ошибка чтения тэгов id3v2", err)
 	}
 	defer tag.Close()
 	if len(vals) > 0 {
@@ -378,7 +378,7 @@ func (t *Tags) write(file string) {
 	}
 
 	if err = tag.Save(); err != nil {
-		log.Fatal("Ошибка записи тэгов id3v2", err)
+		log.Println("Ошибка записи тэгов id3v2", err)
 	}
 }
 
