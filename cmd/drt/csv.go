@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -54,16 +53,7 @@ func isFirstAfterSecond(first, second string) bool {
 	return false
 }
 
-func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
-	var (
-		probes []string
-	)
-
-	// flacMp3 := dotMP3
-	// if Ext(title) == flacMp3 {
-	// 	log.Println(flacMp3)
-	// 	return
-	// }
+func (t *Tags) timeLine(album, in, title, a, fileCSV string, probes ...string) {
 	res, err := open(title)
 	if err == nil {
 		// Не csv
@@ -121,7 +111,6 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 	timeline := fileCSV != ""
 	if timeline {
 		a, probes = probe(in, base, false)
-		fmt.Println(append(probes, probeA(resName, true)...))
 	}
 	pcm := false
 	xlac := false
@@ -146,7 +135,7 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 		outs = append(outs, p(dotMP3))
 	}
 
-	if len(outs) > 1 {
+	if len(outs) > 1 && len(probes) > 0 {
 		exts := []string{}
 		for _, file := range outs[1:] {
 			exts = append(exts, Ext(file))
@@ -219,8 +208,7 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string) {
 			att.title = title
 			att.out = i > 0
 			if i > 0 {
-				att.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-				fmt.Println(append(probes, probeA(resName, true)...))
+				att.audio, _ = probe(filepath.Dir(file), filepath.Base(file), false)
 			} else {
 				att.audio = a
 			}

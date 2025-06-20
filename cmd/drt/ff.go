@@ -155,5 +155,7 @@ func probe(dir, base string, video bool) (audio string, lines []string) {
 		}
 		lines = append(lines, field)
 	}
+	lines = append(lines, probeA(filepath.Join(dir, base), true)...)
+	fmt.Println(lines)
 	return
 }

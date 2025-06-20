@@ -42,6 +42,7 @@ import (
 	version "github.com/abakum/version/lib"
 	"github.com/adrg/xdg"
 	"github.com/fsnotify/fsnotify"
+	"github.com/gofrs/flock"
 	"github.com/xlab/closer"
 	"golang.org/x/text/encoding/unicode"
 )
@@ -93,7 +94,6 @@ var (
 	}
 
 	etc     = []string{} // Тэги
-	probes  []string     // Свойства
 	in      = bufio.NewScanner(os.Stdin)
 	watcher *fsnotify.Watcher
 	// futures = make(map[string]string) // Найти csv по mov mp4
@@ -275,8 +275,7 @@ func main() {
 
 		att.album = album
 		att.title = title
-		att.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-		fmt.Println(append(probes, probeA(file, true)...))
+		att.audio, _ = probe(filepath.Dir(file), filepath.Base(file), false)
 		swrpp(file, att, nil)
 
 		if argsTags {
@@ -299,7 +298,7 @@ func main() {
 
 		isEmpty := make(chan string, 1000)
 		notEmpty := make(chan string, 1000)
-		removed := make(chan string, 1000)
+		remove := make(chan string, 1000)
 
 		go func() {
 			// isEmpty
@@ -321,12 +320,12 @@ func main() {
 				select {
 				case <-ctx.Done():
 					return
-				case file, ok := <-removed:
+				case file, ok := <-remove:
 					if !ok {
 						return
 					}
 					files.Delete(file)
-					log.Println("Обработан", file)
+					log.Println("Не жду", file)
 				case file, ok := <-isEmpty:
 					if !ok {
 						return
@@ -335,17 +334,35 @@ func main() {
 						// дубликаты
 						continue
 					}
-					log.Println("Жду", file)
+					if Ext(file) == dotWAV {
+						log.Println("DR пишет .wav файл так, что не понятно когда закончит.")
+						log.Println("Для автоматического ожидания используй вместо .wav файла файл .mov c аудио частью в pcm")
+						log.Println("Когда DR завершит запись .wav файла нажми <Enter>")
+						// Чтоб это сообщение появлялось не чаще раз в минуту
+						files.Store(file, false)
+						time.AfterFunc(time.Minute, func() { remove <- file })
+						continue
+					}
+					log.Println("Жду DR", file)
 					files.Store(file, true)
-					t.Reset(time.Second)
+					t.Reset(time.Second) // подождём твою маму
 				case <-t.C:
-					reset := false
 					filesR(func(file string, empty bool) bool {
 						if !empty {
 							return true
 						}
 						if f, err := open(file); err == nil {
 							f.Close()
+							// Не пуст
+							l := flock.New(file)
+							ok, err := l.TryRLockContext(ctx, time.Second)
+							fmt.Print(".")
+							l.Close()
+							if err != nil || !ok {
+								t.Reset(time.Second) // подождём твою маму
+								return true
+							}
+
 							if Ext(file) == dotFLAC {
 								fileXXXXXXXX := file
 								file = fixDRflac(file)
@@ -361,15 +378,15 @@ func main() {
 								}
 							}
 							files.Store(file, false)
+							fmt.Println()
+							log.Println("Дождался", file)
 							notEmpty <- file
+
 							return true
 						}
-						reset = true
+						t.Reset(time.Second) // подождём твою маму
 						return true
 					})
-					if reset {
-						t.Reset(time.Second)
-					}
 				}
 			}
 		}()
@@ -401,7 +418,6 @@ func main() {
 							continue
 						}
 
-						log.Println("Дождался", file)
 						futures.Delete(woe)
 					}
 					// time.Sleep(time.Second)
@@ -409,7 +425,7 @@ func main() {
 					sources.LoadOrStore(fileCSV, &ATT{})
 					out, album, _, _ := oaet(fileCSV)
 					drCSV(album, out, fileCSV)
-					removed <- file
+					remove <- file
 					doCSV(fileCSV)
 					fmt.Println(prompt)
 				}
@@ -571,8 +587,7 @@ func main() {
 							drCSV(album, out, file)
 							doCSV(file)
 						} else {
-							att.audio, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-							fmt.Println(append(probes, probeA(file, true)...))
+							att.audio, _ = probe(filepath.Dir(file), filepath.Base(file), false)
 							swrpp(file, att, nil)
 							printHT("*")
 						}
@@ -606,7 +621,6 @@ func main() {
 				}
 
 				a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
-				fmt.Println(append(probes, probeA(file, true)...))
 				att.audio = a
 				swrpp(file, att, tags)
 				// добавляет в sources
@@ -617,8 +631,7 @@ func main() {
 						sources.Store(mov, att)
 						sources.Delete(file)
 						file = mov
-						_, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-						fmt.Println(append(probes, probeA(file, true)...))
+						probe(filepath.Dir(file), filepath.Base(file), false)
 					} else {
 						args := []string{
 							"-hide_banner",
@@ -632,14 +645,13 @@ func main() {
 							sources.Store(mov, att)
 							sources.Delete(file)
 							file = mov
-							_, probes = probe(filepath.Dir(file), filepath.Base(file), false)
-							fmt.Println(append(probes, probeA(file, true)...))
+							probe(filepath.Dir(file), filepath.Base(file), false)
 						} else {
 							log.Println("Не удалось создать файл", mov, err, "код завершения", rs)
 						}
 					}
 				} else {
-					att.tags.timeLine(att.album, filepath.Dir(file), file, a, "")
+					att.tags.timeLine(att.album, filepath.Dir(file), file, a, "", probes...)
 				}
 			}
 		}
