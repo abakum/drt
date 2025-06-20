@@ -362,6 +362,7 @@ func main() {
 								t.Reset(time.Second) // подождём твою маму
 								return true
 							}
+							fmt.Println()
 
 							if Ext(file) == dotFLAC {
 								fileXXXXXXXX := file
@@ -378,7 +379,6 @@ func main() {
 								}
 							}
 							files.Store(file, false)
-							fmt.Println()
 							log.Println("Дождался", file)
 							notEmpty <- file
 
@@ -1018,8 +1018,30 @@ func printHT(parent string) {
 	}
 }
 
-// DR вместо bar.flac пишет bar00047491.flac
+// DR вместо bar.flac пишет bar00047491.flac.
+// DR вместо foo1.flac пишет foo1_00047491.flac.
 func fixDRflac(file string) string {
-	re := regexp.MustCompile(fmt.Sprintf(`(\D|^)(\d{8})(\%s)`, dotFLAC))
-	return re.ReplaceAllString(file, "${1}${3}")
+	re := regexp.MustCompile(fmt.Sprintf(`(_?\d{8})(\%s)`, dotFLAC))
+	return re.ReplaceAllString(file, "${2}")
+}
+
+func TestFixDRflac() {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"bar00047491.flac", "bar.flac"},
+		{"foo1_00047491.flac", "foo1.flac"},
+		{"1bar00047491.flac", "1bar.flac"},
+		{"1foo1_00047491.flac", "1foo1.flac"},
+		{"20250618 Экзамен 01 Чайковский Шесть пьес на одну тему для фортепиано части 1 2_00001137.flac", "20250618 Экзамен 01 Чайковский Шесть пьес на одну тему для фортепиано части 1 2.flac"},
+		{"20250618 Экзамен 03 Шостакович Двадцать четыре прелюдии и фуги часть 14 ми-бемоль минор00047491.flac", "20250618 Экзамен 03 Шостакович Двадцать четыре прелюдии и фуги часть 14 ми-бемоль минор.flac"},
+	}
+
+	for _, tt := range tests {
+		got := fixDRflac(tt.input)
+		if got != tt.want {
+			log.Printf("fixDRflac(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
 }

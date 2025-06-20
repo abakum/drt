@@ -127,6 +127,12 @@ func probe(dir, base string, video bool) (audio string, lines []string) {
 		}
 		has[field] = true
 		switch {
+		case strings.Contains(field, "=0"):
+			continue
+		case strings.Contains(field, "=N/A"):
+			continue
+		case strings.Contains(field, "=unknown"):
+			continue
 		case strings.HasPrefix(field, "codec_name="):
 			switch i {
 			case 1:
@@ -141,12 +147,6 @@ func probe(dir, base string, video bool) (audio string, lines []string) {
 				}
 			}
 			i++
-		case strings.Contains(field, "=0"):
-			continue
-		case strings.Contains(field, "=N/A"):
-			continue
-		case strings.Contains(field, "=unknown"):
-			continue
 		case strings.HasPrefix(field, br):
 			val := strings.TrimPrefix(field, br)
 			if i, err := strconv.Atoi(val); err == nil {

@@ -91,16 +91,11 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string, probes ...string) {
 			}
 		}
 		if err != nil {
-			// for _, e := range dots {
-			// 	log.Println("Жду", p(e))
-			// }
 			log.Println("Жду появления", p(".*"))
 			futures.Store(p(""), fileCSV)
-			// log.Println(lenM(&futures))
 			return
 		} else {
 			futures.Delete(p(""))
-			// log.Println(lenM(&futures))
 		}
 	}
 	resName := res.Name()
