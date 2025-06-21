@@ -2,10 +2,10 @@
  * Resolve Script Name: Export Poster Markers as Still Frames
  * Author: abakum
  * Licence: GPL v3
- * Version: 2.1 (исправлено для кириллицы)
+ * Version: 2.2
 --]]
 
-local VERSION = "2.1"
+local VERSION = "2.2"
 local DEFAULT_EXPORT_FOLDER = "c:/tmp/"
 
 function init()
@@ -24,6 +24,7 @@ function init()
         return
     end
     frameRate = tonumber(project:GetSetting("timelineFrameRate")) or 24
+    exported = 0
     
     return true
 end
@@ -110,9 +111,6 @@ function SanitizeFilename(name)
 end
 
 function ExportMarkedFrames()
-    if not init() then return end
-    
-    
     local timeline = project:GetCurrentTimeline()
     if not timeline then
         print("Ошибка: Таймлайн не найден")
@@ -141,8 +139,6 @@ function ExportMarkedFrames()
         end
     end
     
-    print("Папка для экспорта: " .. outputFolder)
-    
     -- Сортировка маркеров
     local positions = {}
     for pos in pairs(markers) do table.insert(positions, pos) end
@@ -152,7 +148,6 @@ function ExportMarkedFrames()
     local timelineName = SanitizeFilename(timeline:GetName() or "frame")
     
     -- Экспорт кадров
-    local exported = 0
     for _, pos in ipairs(positions) do
         local marker = markers[pos]
         
@@ -176,8 +171,10 @@ function ExportMarkedFrames()
         end
     end
     
-    print(string.format("\nГотово! Успешно экспортировано: %d кадров", exported))
 end
 
 -- Запуск
-ExportMarkedFrames()
+if init() then
+    ExportMarkedFrames()
+    print(string.format("\n=== Успешно экспортировано: %d кадров ===", exported))
+end

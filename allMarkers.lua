@@ -2,22 +2,29 @@
  * Resolve Script Name: Export Poster Markers as Still Frames
  * Author: abakum
  * Licence: GPL v3
- * Version: 2.0 (оптимизированная)
+ * Version: 2.2
 --]]
 
-local VERSION = "2.0"
+local VERSION = "2.2"
 local DEFAULT_EXPORT_FOLDER = "c:/tmp/"
-
--- Основной объект Resolve
-resolve = Resolve()
 
 function init()
     print(string.format("=== Экспорт кадров с маркерами (v%s) ===", VERSION))
     
+    -- Основной объект Resolve
+    resolve = Resolve()
     if not resolve then
         print("Ошибка: Не удалось получить объект Resolve")
         return false
     end
+
+    project = resolve:GetProjectManager():GetCurrentProject()
+    if not project then
+        print("Ошибка: Проект не найден")
+        return
+    end
+    frameRate = tonumber(project:GetSetting("timelineFrameRate")) or 24
+    exported = 0
     
     return true
 end
@@ -68,13 +75,10 @@ function GetParentDirectory(filepath)
 end
 
 function GetCurrentClip()
-    local project = resolve:GetProjectManager():GetCurrentProject()
-    if not project then return nil end
     
     local timeline = project:GetCurrentTimeline()
     if not timeline then return nil end
     
-    local frameRate = tonumber(project:GetSetting("timelineFrameRate")) or 24
     local currentPos = timeline:GetCurrentTimecode()
     local currentFrames = TimecodeToFrames(currentPos, frameRate)
     
@@ -95,22 +99,24 @@ function GetCurrentClip()
     return nil
 end
 
+function SanitizeFilename(name)
+    -- Заменяем запрещенные символы на подчеркивания
+    if not name or type(name) ~= "string" then return "frame" end
+    
+    -- Сохраняем кириллицу, заменяем только специальные символы
+    return name:gsub("[\\/:*?\"<>|]", "_")
+               :gsub("%s+", " ")
+               :gsub("^%s+", "")
+               :gsub("%s+$", "")
+end
+
 function ExportMarkedFrames()
-    if not init() then return end
-    
-    local project = resolve:GetProjectManager():GetCurrentProject()
-    if not project then
-        print("Ошибка: Проект не найден")
-        return
-    end
-    
     local timeline = project:GetCurrentTimeline()
     if not timeline then
         print("Ошибка: Таймлайн не найден")
         return
     end
     
-    local frameRate = tonumber(project:GetSetting("timelineFrameRate")) or 24
     local markers = timeline:GetMarkers()
     
     if not markers or type(markers) ~= "table" or not next(markers) then
@@ -133,36 +139,73 @@ function ExportMarkedFrames()
         end
     end
     
-    print("Папка для экспорта: " .. outputFolder)
-    
     -- Сортировка маркеров
     local positions = {}
     for pos in pairs(markers) do table.insert(positions, pos) end
     table.sort(positions)
     
+    -- Базовое имя файла
+    local timelineName = SanitizeFilename(timeline:GetName() or "frame")
+    
     -- Экспорт кадров
-    local exported = 0
     for _, pos in ipairs(positions) do
         local marker = markers[pos]
         
+        local name = marker.name
         if marker.name == "Marker 1" then
-            timeline:SetCurrentTimecode(pos)
-            
-            local timecode = TimeToTimecode(pos/frameRate, frameRate)
-            local filename = string.format("%s.png", 
-                timeline:GetName())
-            
-            if project:ExportCurrentFrameAsStill(outputFolder .. filename) then
-                print(string.format("Экспортирован %s -> %s", timecode, filename))
-                exported = exported + 1
-            else
-                print("Ошибка экспорта: " .. timecode)
-            end
+            name =""
+        end
+
+        timeline:SetCurrentTimecode(pos)
+        
+        local timecode = TimeToTimecode(pos/frameRate, frameRate)
+        local cleanTimecode = timecode:gsub(":", "_")
+        local filename = string.format("%s%s.png", 
+            timelineName,name)
+        
+        if project:ExportCurrentFrameAsStill(outputFolder .. filename) then
+            print(string.format("Экспортирован %s -> %s", timecode, filename))
+            exported = exported + 1
+        else
+            print("Ошибка экспорта: " .. timecode)
         end
     end
     
-    print(string.format("\nГотово! Успешно экспортировано: %d кадров", exported))
+end
+
+function ExportAllTimelines()
+   
+    local timelineCount = project:GetTimelineCount()
+    if timelineCount == 0 then
+        print("В проекте нет таймлайнов")
+        return
+    end
+    
+    -- Сохраняем исходный текущий таймлайн
+    local originalTimeline = project:GetCurrentTimeline()
+    
+    -- Перебираем все таймлайны
+    for i = 1, timelineCount do
+        local timeline = project:GetTimelineByIndex(i)
+        if timeline then
+            print("\n--- Таймлайн: " .. (timeline:GetName() or "Без имени") .. " ---")
+            
+            -- Устанавливаем текущий таймлайн
+            project:SetCurrentTimeline(timeline)
+            
+            ExportMarkedFrames()
+        end
+    end
+    
+    -- Восстанавливаем исходный таймлайн
+    if originalTimeline then
+        project:SetCurrentTimeline(originalTimeline)
+    end
+    
 end
 
 -- Запуск
-ExportMarkedFrames()
+if init() then
+    ExportAllTimelines()
+    print(string.format("\n=== Успешно экспортировано: %d кадров ===", exported))
+end
