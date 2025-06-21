@@ -1,17 +1,18 @@
 --[[
- * Resolve Script Name: Export Poster Markers as Still Frames
+ * Resolve Script Name: Export Poster Markers as Still Frames (Universal Version)
  * Author: abakum
  * Licence: GPL v3
- * Version: 2.2
+ * Version: 2.6 (универсальный экспорт)
 --]]
 
-local VERSION = "2.2"
+local VERSION = "2.6"
 local DEFAULT_EXPORT_FOLDER = "c:/tmp/"
+local FORMAT = "png"
+local CODEC = "RGB8"
 
 function init()
     print(string.format("=== Экспорт кадров с маркерами (v%s) ===", VERSION))
     
-    -- Основной объект Resolve
     resolve = Resolve()
     if not resolve then
         print("Ошибка: Не удалось получить объект Resolve")
@@ -21,10 +22,12 @@ function init()
     project = resolve:GetProjectManager():GetCurrentProject()
     if not project then
         print("Ошибка: Проект не найден")
-        return
+        return false
     end
     frameRate = tonumber(project:GetSetting("timelineFrameRate")) or 24
     exported = 0
+    render=""
+
     
     return true
 end
@@ -62,11 +65,9 @@ end
 function GetParentDirectory(filepath)
     if type(filepath) ~= "string" or filepath == "" then return nil end
     
-    -- Нормализация путей
     filepath = filepath:gsub("\\", "/"):gsub("/+$", "")
     local parentDir = filepath:match("^(.*)/[^/]*$") or filepath
     
-    -- Для Windows возвращаем с обратными слешами
     if filepath:match("^%a:/") then
         parentDir = parentDir:gsub("/", "\\") .. "\\"
     end
@@ -75,14 +76,14 @@ function GetParentDirectory(filepath)
 end
 
 function GetCurrentClip()
-    
+
     local timeline = project:GetCurrentTimeline()
     if not timeline then return nil end
     
     local currentPos = timeline:GetCurrentTimecode()
     local currentFrames = TimecodeToFrames(currentPos, frameRate)
     
-    for trackIndex = 1, 3 do -- Проверяем первые 3 видео трека
+    for trackIndex = 1, 3 do
         local clips = timeline:GetItemListInTrack("video", trackIndex)
         if clips then
             for _, clip in ipairs(clips) do
@@ -100,17 +101,60 @@ function GetCurrentClip()
 end
 
 function SanitizeFilename(name)
-    -- Заменяем запрещенные символы на подчеркивания
     if not name or type(name) ~= "string" then return "frame" end
-    
-    -- Сохраняем кириллицу, заменяем только специальные символы
     return name:gsub("[\\/:*?\"<>|]", "_")
                :gsub("%s+", " ")
                :gsub("^%s+", "")
                :gsub("%s+$", "")
 end
 
+
+function ExportFrameAsStill(pos, outputPath)
+    -- Пробуем современный метод, если доступен и старый метод если клипы не найдены
+    local TargetDir = GetParentDirectory(outputPath)
+    if type(project.ExportCurrentFrameAsStill) == "function" and DEFAULT_EXPORT_FOLDER ~= TargetDir then
+        if project:ExportCurrentFrameAsStill(outputPath) then
+            return true
+        end
+        print("Со вкладки Deliver даже в новой версии вместо ExportCurrentFrameAsStill будет вызван AddRenderJob")
+    end
+    
+    -- Альтернативный метод через рендер-задания
+    local startFrame = timeline:GetStartFrame()
+    
+    local renderSettings = {
+        MarkIn = startFrame + pos,
+        MarkOut = startFrame + pos,
+        --TargetDir = GetParentDirectory(outputPath),
+        CustomName = outputPath:match("([^\\/]+)$"):gsub("%..+$", ""),
+        ExportVideo = false,
+        ExportAudio = false
+    }
+    
+    if not project:SetRenderSettings(renderSettings) then
+        print("Ошибка: Не удалось установить настройки рендера")
+        return false
+    end
+    
+    if not project:SetCurrentRenderFormatAndCodec(FORMAT, CODEC) then
+        -- Для старых версий
+        local FORMAT = "dpx"
+        local CODEC = "RGB10"
+        if not project:SetCurrentRenderFormatAndCodec(FORMAT, CODEC) then
+            print(string.format("Ошибка: Не удалось установить формат %s и кодек %s", FORMAT, CODEC))
+            return false
+        end
+    end
+
+    local result =project:AddRenderJob()
+    if result then
+        render="Нажмите кнопку Render All на вкладке Deliver"
+    end
+    return result
+end
+
 function ExportMarkedFrames()
+    
     local timeline = project:GetCurrentTimeline()
     if not timeline then
         print("Ошибка: Таймлайн не найден")
@@ -159,11 +203,12 @@ function ExportMarkedFrames()
         timeline:SetCurrentTimecode(pos)
         
         local timecode = TimeToTimecode(pos/frameRate, frameRate)
-        local cleanTimecode = timecode:gsub(":", "_")
-        local filename = string.format("%s%s.png", 
-            timelineName,name)
+        --local cleanTimecode = timecode:gsub(":", "_")
+        local filename = string.format("%s%s", 
+            timelineName, name)
+        local fullPath = outputFolder .. filename .. "." .. FORMAT
         
-        if project:ExportCurrentFrameAsStill(outputFolder .. filename) then
+        if ExportFrameAsStill(pos, fullPath) then
             print(string.format("Экспортирован %s -> %s", timecode, filename))
             exported = exported + 1
         else
@@ -176,5 +221,7 @@ end
 -- Запуск
 if init() then
     ExportMarkedFrames()
+    
     print(string.format("\n=== Успешно экспортировано: %d кадров ===", exported))
+    print(render)
 end
