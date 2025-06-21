@@ -217,11 +217,42 @@ function ExportMarkedFrames()
     end
 end  
 
+function ExportAllTimelines()
+   
+    local timelineCount = project:GetTimelineCount()
+    if timelineCount == 0 then
+        print("В проекте нет таймлайнов")
+        return
+    end
+    
+    -- Сохраняем исходный текущий таймлайн
+    local originalTimeline = project:GetCurrentTimeline()
+    
+    -- Перебираем все таймлайны
+    for i = 1, timelineCount do
+        local timeline = project:GetTimelineByIndex(i)
+        if timeline then
+            print("\n--- Таймлайн: " .. (timeline:GetName() or "Без имени") .. " ---")
+            
+            -- Устанавливаем текущий таймлайн
+            project:SetCurrentTimeline(timeline)
+            
+            ExportMarkedFrames()
+        end
+    end
+    
+    -- Восстанавливаем исходный таймлайн
+    if originalTimeline then
+        project:SetCurrentTimeline(originalTimeline)
+    end
+    
+end
+
 -- Запуск
 if init() then
     project.DeleteAllRenderJobs()
 
-    ExportMarkedFrames()
+    ExportAllTimelines()
     
     print(string.format("\n=== Успешно экспортировано: %d кадров ===", exported))
     

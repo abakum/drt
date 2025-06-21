@@ -1,16 +1,16 @@
 --[[
- * Resolve Script Name: Export Poster Markers as Still Frames
+ * Resolve Script Name: Export Poster Markers as Still Frames (Universal Version)
  * Author: abakum
  * Licence: GPL v3
- * Version: 2.7
+ * Version: 2.7 (автоматический рендеринг и обработка)
 --]]
 
-local VERSION = "2.8"
+local VERSION = "2.7"
 local DEFAULT_EXPORT_FOLDER = "c:/tmp/"
-local FORMAT = "png"
-local CODEC = "RGB8"
---local FORMAT = "dpx"
---local CODEC = "RGB10"
+--local FORMAT = "png"
+--local CODEC = "RGB8"
+local FORMAT = "dpx"
+local CODEC = "RGB10"
 
 function init()
     print(string.format("=== Экспорт кадров с маркерами (v%s) ===", VERSION))
@@ -29,6 +29,7 @@ function init()
     frameRate = tonumber(project:GetSetting("timelineFrameRate")) or 24
     exported = 0
     renderJobsAdded = false
+    outputFolder = ""
     
     return true
 end
@@ -112,7 +113,7 @@ end
 function ExportFrameAsStill(pos, outputPath)
     -- Пробуем современный метод, если доступен и старый метод если клипы не найдены
     local TargetDir = GetParentDirectory(outputPath)
-    if type(project.ExportCurrentFrameAsStill) == "function" and DEFAULT_EXPORT_FOLDER ~= TargetDir then
+    if type(project.ExportCurrentFrameAsStill) == "fu nction" and DEFAULT_EXPORT_FOLDER ~= TargetDir then
         if project:ExportCurrentFrameAsStill(outputPath) then
             return true
         end
@@ -170,7 +171,7 @@ function ExportMarkedFrames()
     
     -- Получаем путь для экспорта
     local clip = GetCurrentClip()
-    local outputFolder = DEFAULT_EXPORT_FOLDER
+    outputFolder = DEFAULT_EXPORT_FOLDER
     
     if clip then
         local mediaPoolItem = clip:GetMediaPoolItem()
@@ -217,6 +218,137 @@ function ExportMarkedFrames()
     end
 end  
 
+function GetFilesInDirectory(path)
+    local files = {}
+    local handle
+    
+    if package.config:sub(1,1) == "\\" then -- Windows
+        handle = io.popen('dir /b "'..path..'" 2>nul')
+    else -- Linux/Mac
+        handle = io.popen('ls -1 "'..path..'" 2>/dev/null')
+    end
+    
+    if handle then
+        for file in handle:lines() do
+            table.insert(files, file)
+        end
+        handle:close()
+    else
+        print("Ошибка чтения директории")
+    end
+    
+    return files
+end
+
+function GetFilesInFolder(folderPath)
+    local mediaStorage = resolve:GetMediaStorage()
+    if not mediaStorage then
+        print("Ошибка: Не удалось получить доступ к MediaStorage")
+        return {}
+    end
+    
+    local files = mediaStorage:GetFileList(folderPath)
+    return files or {}
+end
+
+local function rename(src, dst)
+    local content = io.open(src, "rb"):read("*a")
+    local out = io.open(dst, "wb")
+    out:write(content)
+    out:close()
+    --os.remove(src)
+    return true
+end
+
+function ProcessRenderResults(outputFolder)
+    print("\nОбработка результатов рендеринга...")
+    
+    -- Переходим на вкладку Deliver
+    --resolve:OpenPage("Deliver")
+    
+    
+    -- Запускаем рендеринг
+    if project:StartRendering() then
+        print("Рендеринг запущен...")
+        
+        -- Ожидаем завершения рендеринга
+        while project:IsRenderingInProgress() do
+            os.execute("ping -n 3 127.0.0.1 > nul") -- Задержка 1 секунда
+        end
+        
+        print("Рендеринг завершен!")
+        
+        -- Обработка файлов
+        print(outputFolder)
+        local files = GetFilesInFolder(outputFolder)
+        if #files == 0 then
+            print("Нет файлов для обработки в:", outputFolder)
+        else
+            for _, file in ipairs(files) do
+                local originalPath =  file
+                local newName = file:gsub("(_?%d%d%d%d%d%d%d%d)(%.png)$", "%2")  -- Для .png
+                                    :gsub("(_?%d%d%d%d%d%d%d%d)(%.dpx)$", "%2")  -- Для .dpx
+                
+                if file ~= newName then
+                    local newPath =  newName
+                    local src = originalPath:gsub("\\", "/"):gsub(" ", "\\ ")
+                    print(file .. " ~> ")
+                    local dst = newPath:gsub("\\", "/"):gsub(" ", "\\ ")
+                    print(newName)
+                    local ok = rename(file, newName)
+                    print(ok)
+                    
+                    -- Конвертируем DPX в PNG если нужно
+                    --if file:match("%.dpx$") then
+                    --    local pngPath = newPath:gsub("%.dpx$", ".png")
+                    --    ConvertDpxToPng(newPath, pngPath)
+                    --    --os.remove(newPath)
+                    --end
+                end
+            end
+        end
+    else
+        print("Ошибка запуска рендеринга")
+    end
+end
+
+function ConvertDpxToPng(dpxPath, pngPath)
+    local fusion = resolve:Fusion()
+    if not fusion then
+        print("Ошибка: Не удалось получить доступ к Fusion")
+        return false
+    end
+    
+    local comp = fusion:NewComp()
+    if not comp then
+        print("Ошибка: Не удалось получить композицию")
+        return false
+    end
+    
+    -- Создаем инструменты для конвертации
+    local loader = comp:AddTool("Loader")
+    local saver = comp:AddTool("Saver")
+    
+    loader.Clip = dpxPath
+    saver.Clip = pngPath
+    saver["FormatConfig.FileFormat"] = "PNG"
+    
+    -- Соединяем инструменты
+    saver:ConnectInput("Input", loader, "Output")
+    
+    -- Рендерим один кадр
+    local success = comp:Render({
+        Start = 0,
+        End = 0,
+        Wait = true
+    })
+    
+    loader:Delete()
+    saver:Delete()
+    
+    return success
+end
+
 -- Запуск
 if init() then
     project.DeleteAllRenderJobs()
@@ -226,6 +358,6 @@ if init() then
     print(string.format("\n=== Успешно экспортировано: %d кадров ===", exported))
     
     if renderJobsAdded then
-        project:StartRendering()
+        ProcessRenderResults(outputFolder)
     end
 end
