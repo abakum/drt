@@ -1,4 +1,7 @@
+-- Глобальная переменная resolve, как вы просили
 resolve = Resolve()
+
+-- Остальные переменные локальные
 local projectManager = resolve:GetProjectManager()
 local project = projectManager:GetCurrentProject()
 local mediaPool = project:GetMediaPool()
@@ -26,6 +29,14 @@ local function rootTimeLines()
     return root, timeLines
 end
 
+-- Функция для очистки имени файла
+local function sanitizeFilename(filename)
+    -- Удаляем недопустимые символы в именах файлов
+    local invalidChars = '[<>:"/\\|?*]'
+    local sanitized = string.gsub(filename, invalidChars, "_")
+    return sanitized
+end
+
 -- Основная функция
 local function main()
     -- Получаем корневую папку и таймлайны
@@ -33,8 +44,8 @@ local function main()
     print("Root path:", root)
     print("Number of timelines:", #timeLines)
     
-    -- Таблица для хранения клипов по таймлайнам
-    local tlm = {} -- ключ: имя таймлайна, значение: список клипов
+    -- Таблица для хранения клипов по таймлайнам и mediaId
+    local tlm = {} -- структура: tlm[timelineName][mediaId] = mediaPoolItem
     
     -- Получаем количество таймлайнов в проекте
     local tlc = project:GetTimelineCount()
@@ -42,6 +53,12 @@ local function main()
     -- Перебираем все таймлайны
     for i = 1, tlc do
         local tl = project:GetTimelineByIndex(i)
+        local tln = tl:GetName()
+        
+        -- Инициализируем таблицу для этого таймлайна
+        if not tlm[tln] then
+            tlm[tln] = {}
+        end
         
         -- Проверяем все типы треков
         local trackTypes = {"subtitle", "video", "audio"}
@@ -54,15 +71,14 @@ local function main()
                 
                 -- Перебираем все элементы в треке
                 for _, tli in ipairs(tlis) do
-                    local tln = tl:GetName()
-                    print(string.format("Timeline %d (%s) - Track %s %d: %s", 
-                          i, tln, trackType, j, tli:GetName()))
+                    local mpi = tli:GetMediaPoolItem()
+                    local mi = mpi:GetMediaId()
                     
-                    -- Добавляем клип в таблицу
-                    if not tlm[tln] then
-                        tlm[tln] = {}
-                    end
-                    table.insert(tlm[tln], tli:GetMediaPoolItem())
+                    -- Сохраняем клип по mediaId
+                    tlm[tln][mi] = mpi
+                    
+                    print(string.format("Timeline: %s | Clip: %s", 
+                          tln, mpi:GetName()))
                 end
             end
         end
@@ -70,24 +86,22 @@ local function main()
     
     -- Экспортируем метаданные для каждого таймлайна
     for _, timeLine in ipairs(timeLines) do
-        local name = timeLine:GetName()
-        local file = root .. "\\" .. name .. ".csv"  -- Формируем путь к файлу CSV
+        local name = sanitizeFilename(timeLine:GetName())
+        local file = root .. "/" .. name .. ".csv"
+        
+        -- Собираем клипы для экспорта (только из текущего таймлайна)
+        local exportClips = {timeLine}
         local tln = timeLine:GetName()
         
-        print("Exporting metadata to:", file)
-        print("Clips in timeline:", #(tlm[tln] or {}))
-        
-        -- Собираем все клипы для экспорта
-        local exportItems = {}
         if tlm[tln] then
-            for _, item in ipairs(tlm[tln]) do
-                table.insert(exportItems, item)
+            for mi, mpi in pairs(tlm[tln]) do
+                table.insert(exportClips, mpi)
             end
         end
-        table.insert(exportItems, timeLine)
         
         -- Экспортируем метаданные
-        mediaPool:ExportMetadata(file, exportItems)
+        print("Exporting metadata to:", file)
+        mediaPool:ExportMetadata(file, exportClips)
     end
 end
 

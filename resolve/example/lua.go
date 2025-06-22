@@ -4,6 +4,7 @@ package main
 import (
 	"log"
 	"path/filepath"
+	"regexp"
 
 	dr "github.com/abakum/drt/resolve"
 )
@@ -36,11 +37,18 @@ func rootTimeLines() (root string, timeLines []*dr.MediaPoolItem) {
 	return
 }
 
+func sanitizeFilename(filename string) string {
+	// Example: Remove common invalid Windows characters
+	invalidChars := regexp.MustCompile(`[<>:"/\\|?*]`)
+	sanitized := invalidChars.ReplaceAllString(filename, "_") // Replace with underscore
+	return sanitized
+}
+
 func main() {
 	// csv
 	root, timeLines := rootTimeLines()
 	log.Println(root, timeLines)
-	tlm := make(map[string][]*dr.MediaPoolItem) // клипы в тайлайне
+	tlm := make(map[string]map[string]*dr.MediaPoolItem) // клипы в тайлайне
 	tlc := project.GetTimelineCount()
 	for i := 1; i <= tlc; i++ {
 		tl := project.GetTimelineByIndex(i)
@@ -50,18 +58,24 @@ func main() {
 				tlis := tl.GetItemListInTrack(trackType, j)
 				for _, tli := range tlis {
 					tln := tl.GetName()
-					log.Println(i, trackType, j, tln, tli.GetName())
-					tlm[tln] = append(tlm[tln], tli.GetMediaPoolItem())
+					mpi := tli.GetMediaPoolItem()
+					mi := mpi.GetMediaId()
+					tlm[tln][mi] = mpi
 				}
 			}
 		}
 	}
 	for _, timeLine := range timeLines {
-		name := timeLine.GetName()
-		file := filepath.Join(root, name)
+		name := sanitizeFilename(timeLine.GetName())
+		file := filepath.Join(root, name) + ".csv"
+		var clips []*dr.MediaPoolItem
+		clips = append(clips, timeLine)
 		tln := timeLine.GetName()
-		log.Println(file, tlm[tln])
-		log.Println(tlm[tln])
-		mediaPool.ExportMetadata(file+".csv", append(tlm[tln], timeLine)...)
+		for mi, mpi := range tlm[tln] {
+			clips = append(clips, mpi)
+			log.Println(tln)
+			log.Println(mi, " ", mpi.GetName())
+		}
+		mediaPool.ExportMetadata(file, clips...)
 	}
 }
