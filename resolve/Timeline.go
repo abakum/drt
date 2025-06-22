@@ -48,12 +48,12 @@ func (t *Timeline) AddMarker(frameId int, color, name, note string, duration int
 }
 
 // 10. GetMarkers - возвращает все маркеры
-func (t *Timeline) GetMarkers() map[int]map[string]interface{} {
+func (t *Timeline) GetMarkers() map[int]Marker {
 	return nil
 }
 
 // 11. GetMarkerByCustomData - возвращает маркер по данным
-func (t *Timeline) GetMarkerByCustomData(customData string) map[string]interface{} {
+func (t *Timeline) GetMarkerByCustomData(customData string) map[int]Marker {
 	return nil
 }
 
@@ -92,7 +92,8 @@ func (t *Timeline) GetCurrentTimecode() string {
 	return ""
 }
 
-// 19. SetCurrentTimecode - устанавливает текущий таймкод
+// 19. SetCurrentTimecode - устанавливает текущий таймкод.
+// timecode format - defaults to "00:00:00:00"
 func (t *Timeline) SetCurrentTimecode(timecode string) bool {
 	return false
 }

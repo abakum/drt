@@ -54,7 +54,7 @@ func (p *Project) SetPreset(presetName string) bool {
 }
 
 // 11. AddRenderJob - добавляет задачу рендеринга
-func (p *Project) AddRenderJob() string {
+func (p *Project) AddRenderJob() (jobId string) {
 	return ""
 }
 
@@ -173,4 +173,9 @@ func (p *Project) RefreshLUTList() bool {
 	return false
 }
 
-// Вспомогательные типы
+// Exports current frame as still to supplied filePath.
+// filePath must end in valid export file format.
+// Returns True if successful, False otherwise.
+func (p *Project) ExportCurrentFrameAsStill(filePath string) bool {
+	return false
+}
