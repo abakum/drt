@@ -1,180 +1,214 @@
---[[
- * Resolve Script Name: Export Poster Markers as Still Frames
- * Author: abakum
- * Licence: GPL v3
- * Version: 2.2
---]]
+-- Объявление глобальных переменных
+resolve = Resolve()
+projectManager = resolve:GetProjectManager()
+project = projectManager:GetCurrentProject()
+mediaPool = project:GetMediaPool()
+rootFolder = mediaPool:GetRootFolder()
+clips = rootFolder:GetClipList()
+jobs = {}
+outputFolder = ""
+frameRate = 0.0
+exported = 0
+total = 0
+renderJobsAdded = false
 
-local VERSION = "2.2"
-local DEFAULT_EXPORT_FOLDER = "c:/tmp/"
+-- Константы
+local FORMAT = "png"
+local CODEC = "RGB8"
+local FORMATb = "dpx"
+local CODECb = "RGB10"
 
-function init()
-    print(string.format("=== Экспорт кадров с маркерами (v%s) ===", VERSION))
+-- Функция преобразования времени в таймкод
+local function timeToTimecode(seconds, fps)
+    return string.format("%02d:%02d:%02d:%02d",
+        math.floor(seconds / 3600),
+        math.floor(math.fmod(seconds, 3600) / 60),
+        math.floor(math.fmod(seconds, 60)),
+        math.floor(math.fmod(seconds, 1) * fps))
+end
+
+-- Функция преобразования таймкода в кадры
+local function timecodeToFrames(timecode, fps)
+    if type(timecode) == "number" then
+        return math.floor(timecode)
+    elseif type(timecode) == "string" then
+        local parts = {}
+        for part in string.gmatch(timecode, "([^:]+)") do
+            table.insert(parts, part)
+        end
+        if #parts ~= 4 then return 0 end
+        
+        local h = tonumber(parts[1]) or 0
+        local m = tonumber(parts[2]) or 0
+        local s = tonumber(parts[3]) or 0
+        local f = tonumber(parts[4]) or 0
+        
+        return f + s * fps + m * 60 * fps + h * 3600 * fps
+    else
+        return 0
+    end
+end
+
+-- Функция очистки имени файла
+local function sanitizeFilename(name)
+    if name == "" then
+        return "frame"
+    end
     
-    -- Основной объект Resolve
-    resolve = Resolve()
-    if not resolve then
-        print("Ошибка: Не удалось получить объект Resolve")
+    -- Замена недопустимых символов
+    name = string.gsub(name, '[\\/:*?"<>|]', '_')
+    -- Удаление лишних пробелов
+    name = string.gsub(name, '%s+', ' ')
+    return string.gsub(name, '^%s*(.-)%s*$', '%1')
+end
+
+-- Функция экспорта кадра
+local function exportFrameAsStill(pos, outputPath)
+    -- Попробуем новый метод
+    if project:ExportCurrentFrameAsStill(outputPath) then
+        return true
+    end
+
+	if resolve:GetCurrentPage() == "deliver" then
+		print("С панели Deliver даже в новой версии вместо ExportCurrentFrameAsStill будет вызван AddRenderJob")
+    end
+
+    -- План B через Deliver
+    local timeline = project:GetCurrentTimeline()
+    local startFrame = timeline:GetStartFrame()
+
+    local renderSettings = {
+        MarkIn = startFrame + pos,
+        MarkOut = startFrame + pos,
+        CustomName = string.gsub(outputPath:match("([^/\\]+)$"), "%..+$", ""),
+        TargetDir = outputFolder,
+        ExportVideo = false,
+        ExportAudio = false
+    }
+
+    if not project:SetRenderSettings(renderSettings) then
+        print("Не удалось установить настройки рендера")
         return false
     end
 
-    project = resolve:GetProjectManager():GetCurrentProject()
-    if not project then
-        print("Ошибка: Проект не найден")
-        return
+    if not project:SetCurrentRenderFormatAndCodec(FORMAT, CODEC) then
+        if not project:SetCurrentRenderFormatAndCodec(FORMATb, CODECb) then
+            print(string.format("Не удалось установить формат %s и кодек %s", FORMATb, CODECb))
+            return false
+        end
     end
-    frameRate = tonumber(project:GetSetting("timelineFrameRate")) or 24
-    exported = 0
-    
+
+    local jobId = project:AddRenderJob()
+    table.insert(jobs, jobId)
+    renderJobsAdded = true
     return true
 end
 
-function AddLeadingZeros(num)
-    return string.format("%02d", tonumber(num) or 0)
-end
-
-function TimeToTimecode(seconds, fps)
-    seconds = tonumber(seconds) or 0
-    fps = tonumber(fps) or 24
-    
-    local h = math.floor(seconds / 3600)
-    local m = math.floor((seconds % 3600) / 60)
-    local s = math.floor(seconds % 60)
-    local f = math.floor((seconds - math.floor(seconds)) * fps)
-    
-    return string.format("%s:%s:%s:%s", 
-        AddLeadingZeros(h), 
-        AddLeadingZeros(m), 
-        AddLeadingZeros(s), 
-        AddLeadingZeros(f))
-end
-
-function TimecodeToFrames(timecode, fps)
-    if type(timecode) == "number" then return timecode end
-    if type(timecode) ~= "string" then return 0 end
-    
-    local h, m, s, f = timecode:match("(%d+):(%d+):(%d+):(%d+)")
-    h, m, s, f = tonumber(h), tonumber(m), tonumber(s), tonumber(f)
-    
-    return f + s * fps + m * 60 * fps + h * 3600 * fps
-end
-
-function GetParentDirectory(filepath)
-    if type(filepath) ~= "string" or filepath == "" then return nil end
-    
-    -- Нормализация путей
-    filepath = filepath:gsub("\\", "/"):gsub("/+$", "")
-    local parentDir = filepath:match("^(.*)/[^/]*$") or filepath
-    
-    -- Для Windows возвращаем с обратными слешами
-    if filepath:match("^%a:/") then
-        parentDir = parentDir:gsub("/", "\\") .. "\\"
-    end
-    
-    return parentDir
-end
-
-function GetCurrentClip()
-    
+-- Функция экспорта помеченных кадров
+local function exportMarkedFrames()
     local timeline = project:GetCurrentTimeline()
-    if not timeline then return nil end
-    
-    local currentPos = timeline:GetCurrentTimecode()
-    local currentFrames = TimecodeToFrames(currentPos, frameRate)
-    
-    for trackIndex = 1, 3 do -- Проверяем первые 3 видео трека
-        local clips = timeline:GetItemListInTrack("video", trackIndex)
-        if clips then
-            for _, clip in ipairs(clips) do
-                local start = TimecodeToFrames(clip:GetStart(), frameRate)
-                local duration = clip:GetDuration()
-                
-                if currentFrames >= start and currentFrames <= start + duration - 1 then
-                    return clip
-                end
-            end
-        end
-    end
-    
-    return nil
-end
-
-function SanitizeFilename(name)
-    -- Заменяем запрещенные символы на подчеркивания
-    if not name or type(name) ~= "string" then return "frame" end
-    
-    -- Сохраняем кириллицу, заменяем только специальные символы
-    return name:gsub("[\\/:*?\"<>|]", "_")
-               :gsub("%s+", " ")
-               :gsub("^%s+", "")
-               :gsub("%s+$", "")
-end
-
-function ExportMarkedFrames()
-    local timeline = project:GetCurrentTimeline()
-    if not timeline then
-        print("Ошибка: Таймлайн не найден")
-        return
-    end
-    
     local markers = timeline:GetMarkers()
     
     if not markers or type(markers) ~= "table" or not next(markers) then
-        print("Ошибка: Маркеры не найдены")
+        print("Маркеры не найдены")
         return
     end
-    
-    -- Получаем путь для экспорта
-    local clip = GetCurrentClip()
-    local outputFolder = DEFAULT_EXPORT_FOLDER
-    
-    if clip then
-        local mediaPoolItem = clip:GetMediaPoolItem()
-        if mediaPoolItem then
-            local clipPath = mediaPoolItem:GetClipProperty("File Path")
-            if clipPath and clipPath ~= "" then
-                outputFolder = GetParentDirectory(clipPath)
-                print("Найден клип: " .. clipPath)
-            end
-        end
-    end
-    
+
     -- Сортировка маркеров
     local positions = {}
-    for pos in pairs(markers) do table.insert(positions, pos) end
+    for pos, _ in pairs(markers) do
+        table.insert(positions, pos)
+    end
     table.sort(positions)
-    
+
     -- Базовое имя файла
-    local timelineName = SanitizeFilename(timeline:GetName() or "frame")
-    
+    local timelineName = sanitizeFilename(timeline:GetName())
+
     -- Экспорт кадров
     for _, pos in ipairs(positions) do
         local marker = markers[pos]
-        
         local name = marker.name
-        if marker.name == "Marker 1" then
+        if name == "Marker 1" then
             name = ""
         end
 
-        timeline:SetCurrentTimecode(pos)
-        
-        local timecode = TimeToTimecode(pos/frameRate, frameRate)
-        local cleanTimecode = timecode:gsub(":", "_")
-        local filename = string.format("%s%s.png", 
-            timelineName,name)
-        
-        if project:ExportCurrentFrameAsStill(outputFolder .. filename) then
+        local timecode = timeToTimecode(pos / frameRate, frameRate)
+        timeline:SetCurrentTimecode(timecode)
+
+        local filename = timelineName .. name
+        local fullPath = outputFolder .. "/" .. filename .. "." .. FORMAT
+
+        if exportFrameAsStill(pos, fullPath) then
             print(string.format("Экспортирован %s -> %s", timecode, filename))
             exported = exported + 1
         else
-            print("Ошибка экспорта: " .. timecode)
+            print("Ошибка экспорта " .. timecode)
+        end
+        total = total + 1
+    end
+end
+
+-- Функция экспорта всех таймлайнов
+local function exportAllTimelines()
+    local timelineCount = project:GetTimelineCount()
+
+    -- Сохраняем оригинальный таймлайн
+    local originalTimeline = project:GetCurrentTimeline()
+
+    -- Обрабатываем все таймлайны
+    for i = 1, timelineCount do
+        local timeline = project:GetTimelineByIndex(i)
+        print(string.format("\n--- Таймлайн: %s ---", timeline:GetName()))
+        project:SetCurrentTimeline(timeline)
+        exportMarkedFrames()
+    end
+
+    -- Восстанавливаем оригинальный таймлайн
+    if timelineCount > 1 then
+        project:SetCurrentTimeline(originalTimeline)
+    end
+end
+
+-- Функция получения корневой папки и подсчета маркеров
+local function root()
+    
+    for _, clip in ipairs(clips) do
+        local filePath = clip:GetClipProperty("File Path")
+        if filePath ~= "" then
+            -- Допустим исходные и результирующие медиафайлы в одном каталоге
+            return string.match(filePath, "(.*[/\\])") or ""
         end
     end
     
+    return ""
 end
 
--- Запуск
-if init() then
-    ExportMarkedFrames()
-    print(string.format("\n=== Успешно экспортировано: %d кадров ===", exported))
+-- Основная функция
+local function main()
+    print("=== Экспорт кадров с маркерами ===")
+
+    if not project then
+        print("Проект не найден")
+        return
+    end
+    
+    outputFolder = root()
+    if outputFolder == "" then
+        print("Пустой медиапул")
+        return
+    end
+    
+    local fpsStr = project:GetSetting("timelineFrameRate")
+    frameRate = tonumber(fpsStr) or 24.0
+
+    project:DeleteAllRenderJobs()
+    exportAllTimelines()
+
+    print(string.format("=== Экспортировано %d из %d ===", exported, total))
+    if renderJobsAdded then
+        project:StartRendering()
+    end
 end
+
+-- Запуск программы
+main()

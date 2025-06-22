@@ -31,6 +31,7 @@ var (
 	outputFolder    string
 	frameRate       float64
 	exported        int
+	total           int
 	renderJobsAdded bool
 )
 
@@ -85,8 +86,11 @@ func sanitizeFilename(name string) string {
 func exportFrameAsStill(pos int, outputPath string) bool {
 	// Попробуем новый метод
 	if project.ExportCurrentFrameAsStill(outputPath) {
-		fmt.Println("Со вкладки Deliver даже в новой версии вместо ExportCurrentFrameAsStill будет вызван AddRenderJob")
 		return true
+	}
+
+	if resolve.GetCurrentPage() == "deliver" {
+		fmt.Println("С панели Deliver даже в новой версии вместо ExportCurrentFrameAsStill будет вызван AddRenderJob")
 	}
 
 	// План B через Deliver
@@ -116,6 +120,7 @@ func exportFrameAsStill(pos int, outputPath string) bool {
 
 	jobId := project.AddRenderJob()
 	jobs = append(jobs, jobId)
+	renderJobsAdded = true
 	return true
 }
 
@@ -157,6 +162,7 @@ func exportMarkedFrames() {
 		} else {
 			fmt.Println("Ошибка экспорта " + timecode)
 		}
+		total++
 	}
 }
 
@@ -169,11 +175,9 @@ func exportAllTimelines() {
 	// Process all timelines
 	for i := 1; i <= timelineCount; i++ {
 		timeline := project.GetTimelineByIndex(i)
-		if markers := timeline.GetMarkers(); len(markers) > 0 {
-			fmt.Printf("\n--- Таймлайн: %s ---\n", timeline.GetName())
-			project.SetCurrentTimeline(timeline)
-			exportMarkedFrames()
-		}
+		fmt.Printf("\n--- Таймлайн: %s ---\n", timeline.GetName())
+		project.SetCurrentTimeline(timeline)
+		exportMarkedFrames()
 	}
 
 	// Restore original timeline
@@ -182,15 +186,11 @@ func exportAllTimelines() {
 	}
 }
 
-func rootMarkers() (root string, total int) {
+func root() (root string) {
 	for _, clip := range clips {
-		if filePath := clip.GetClipProperty("File Path"); filePath == "" {
-			// Это таймлайн
-			total += len(clip.GetMarkers())
-			continue
-		} else {
+		if filePath := clip.GetClipProperty("File Path"); filePath != "" {
 			// Допустим исходные и результирующие медиафайлы в одном каталоге
-			root = filepath.Dir(filePath)
+			return filepath.Dir(filePath)
 		}
 	}
 	return
@@ -203,13 +203,9 @@ func main() {
 		log.Println("Проект не найден")
 		return
 	}
-	outputFolder, total := rootMarkers()
+	outputFolder := root()
 	if outputFolder == "" {
 		log.Println("Пустой медиапул")
-		return
-	}
-	if total == 0 {
-		log.Println("Нет маркеров на таймлайнах")
 		return
 	}
 
