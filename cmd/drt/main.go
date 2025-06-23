@@ -483,7 +483,7 @@ func main() {
 					}
 					switch e {
 					case dotCSV, dotJPG, ".dpx", ".cin", ".tif", ".ppm", ".bmp", ".xpm", ".png":
-						// Любой csv или картинка для конвертации или переименования после экспорта
+						// Любой csv или картинка для конвертации или а png и jpg для переименования после экспорта
 						isEmpty <- file
 					case dotFLAC:
 						file = fixDRd8(file, dotFLAC)
