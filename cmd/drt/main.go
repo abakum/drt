@@ -59,6 +59,7 @@ const (
 	dotMP4  = ".mp4"
 	dotFLAC = ".flac"
 	dotMP3  = ".mp3"
+	dotJPG  = ".jpg"
 	prompt  = `Пустая строка подтверждает ввод, ^С прерывает ввод.
 Введи "имя файла" или drag-n-drop или тэг=значение`
 )
@@ -363,14 +364,36 @@ func main() {
 								return true
 							}
 							fmt.Println()
-
-							if Ext(file) == dotFLAC {
+							base := filepath.Base(file)
+							dir := filepath.Dir(file)
+							switch e := Ext(file); e {
+							case ".dpx", ".cin", ".tif", ".ppm", ".bmp", ".xpm":
+								jpg := fixDRd8(base, e)
+								exported := base != jpg
+								jpg = trimExt(jpg) + dotJPG
+								args := []string{
+									"-hide_banner",
+									"-v", "error",
+									"-i", base,
+									"-q:v", "1", jpg,
+								}
+								rs, err := run(ctx, os.Stdout, "ffmpeg", dir, args...)
+								log.Println(base, "~>", jpg, err)
+								if err == nil && rs == 0 {
+									if exported {
+										// Удаляем только эксортированные
+										os.Remove(file)
+									}
+									file = filepath.Join(dir, jpg)
+								} else {
+									log.Println("Не удалось создать файл", jpg, err, "код завершения", rs)
+								}
+							case ".jpg", ".png", dotFLAC:
 								fileXXXXXXXX := file
-								file = fixDRflac(file)
+								file = fixDRd8(file, e)
 								if file != fileXXXXXXXX {
-									log.Println("DR вместо", filepath.Base(file), "пишет", filepath.Base(fileXXXXXXXX))
 									err := os.Rename(fileXXXXXXXX, file)
-									log.Println(filepath.Base(fileXXXXXXXX), "~>", filepath.Base(file), err)
+									log.Println(base, "~>", filepath.Base(file), err)
 									if err == nil {
 										files.Delete(fileXXXXXXXX)
 									} else {
@@ -459,11 +482,11 @@ func main() {
 						continue
 					}
 					switch e {
-					case dotCSV:
-						// Любой csv
+					case dotCSV, dotJPG, ".dpx", ".cin", ".tif", ".ppm", ".bmp", ".xpm", ".png":
+						// Любой csv или картинка для конвертации или переименования после экспорта
 						isEmpty <- file
 					case dotFLAC:
-						file = fixDRflac(file)
+						file = fixDRd8(file, dotFLAC)
 						fallthrough
 					default:
 						// Остальные если это результаты
@@ -1020,12 +1043,12 @@ func printHT(parent string) {
 
 // DR вместо bar.flac пишет bar00047491.flac.
 // DR вместо foo1.flac пишет foo1_00047491.flac.
-func fixDRflac(file string) string {
-	re := regexp.MustCompile(fmt.Sprintf(`(_?\d{8})(\%s)`, dotFLAC))
+func fixDRd8(file, ext string) string {
+	re := regexp.MustCompile(fmt.Sprintf(`(_?\d{8})(\%s)`, ext))
 	return re.ReplaceAllString(file, "${2}")
 }
 
-func TestFixDRflac() {
+func TestFixDRd8() {
 	tests := []struct {
 		input string
 		want  string
@@ -1039,9 +1062,9 @@ func TestFixDRflac() {
 	}
 
 	for _, tt := range tests {
-		got := fixDRflac(tt.input)
+		got := fixDRd8(tt.input, dotFLAC)
 		if got != tt.want {
-			log.Printf("fixDRflac(%q) = %q, want %q", tt.input, got, tt.want)
+			log.Printf("fixDRd8(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
