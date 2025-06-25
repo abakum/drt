@@ -82,7 +82,7 @@ local function sanitizeFilename(name)
     return string.gsub(name, '^%s*(.-)%s*$', '%1')
 end
 
-local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip)
+local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, frame_rate)
     -- Попробуем новый метод
     if type(Project.ExportCurrentFrameAsStill) == "function" then
         local ctc=timeline:GetCurrentTimecode(timecode)
@@ -99,8 +99,17 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip)
 
     -- План B через Deliver
 	-- Запомним
+	local In=tlClip:GetClipProperty("In")
+	local Out=tlClip:GetClipProperty("Out")
+	local rs = {
+			MarkIn = luaresolve:frame_from_timecode(In, frame_rate),
+			MarkOut = luaresolve:frame_from_timecode(Out, frame_rate),
+	}
+	-- print(In.." " ..rs.MarkIn)
+	-- print(Out.." " ..rs.MarkOut)
+ 
 	local preset=getBase(getDir(outputPath))
-    local fac=Project:GetCurrentRenderFormatAndCodec()
+	local fac=Project:GetCurrentRenderFormatAndCodec()
 	Project:SaveAsNewRenderPreset(preset)
     if not Project:SetCurrentRenderFormatAndCodec(FORMAT, CODEC) then
         if not Project:SetCurrentRenderFormatAndCodec(FORMATb, CODECb) then
@@ -119,11 +128,8 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip)
         -- ExportAudio = false
     }
 
-	local In=tlClip:GetClipProperty("In")
-	local Out=tlClip:GetClipProperty("Out")
     if not Project:SetRenderSettings(renderSettings) then
         print("Не удалось установить настройки рендера")
-		-- Вспомним
         return false
     end
 
@@ -141,12 +147,15 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip)
         RenderJobsAdded = ok
     end
 	-- Вспомним
-    Project:SetCurrentRenderFormatAndCodec(fac.format, fac.codec)
+	Project:SetRenderSettings(rs)
+	Project:SetCurrentRenderFormatAndCodec(fac.format, fac.codec)
 	Project:LoadRenderPreset(preset)
-	tlClip:SetClipProperty("In", In)
-	tlClip:SetClipProperty("Out", Out)
 
-    return ok
+	-- Вспомним
+ 	-- Работает в 19 но не в 17 
+	--print(tlClip:SetClipProperty("In", In))
+	--print(tlClip:SetClipProperty("Out", Out))
+ return ok
 end
 
 -- Основная функция
@@ -236,8 +245,8 @@ local function main()
                             fullPath = output .. "/tl/" .. name .. " " .. sanitizeFilename(marker.name) .. "." .. FORMAT
                         end
                        Project:SetCurrentTimeline(timeline)
-                       exportFrameAsStill(data.frame, fullPath, timeline, data.start_tc, tlClips[tln])
-                    else   
+                       exportFrameAsStill(data.frame, fullPath, timeline, data.start_tc, tlClips[tln], frame_rate)
+                    else
                         marker_table[#marker_table+1] = data
                     end
                 end
