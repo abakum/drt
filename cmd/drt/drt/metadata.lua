@@ -1,4 +1,15 @@
--- Глобальная переменная resolve
+function iif(condition, true_val, false_val)
+    if condition then
+        return true_val
+    else
+        return false_val
+    end
+end
+
+bmd=require("bmd")
+ffi=require("ffi")
+bit=require("bit")
+
 resolve = Resolve()
 local projectManager = assert(resolve:GetProjectManager(),"GetProjectManager")
 
@@ -34,31 +45,28 @@ local function rootTimeLines()
     MediaPool:SetCurrentFolder(RootFolder)
     local dir = ""
     local timeLines = {}
-    local mInOut = {}
+    -- local mInOut = {}
     
     for _, clip in ipairs(Clips) do
-        print(clip:GetClipProperty("In"))
-        print(clip:GetClipProperty("Out"))
         local filePath = clip:GetClipProperty("File Path")
         if filePath == "" then
             -- Это таймлайн
-            table.insert(timeLines, clip)
-            local cn=clip:GetName()
-            if not cn then
-                print(clip:GetClipProperty("In").."in")
-                print(clip:GetClipProperty("Out").."out")
-                mInOut[cn]={
-                    In=clip:GetClipProperty("In"),
-                    Out=clip:GetClipProperty("Out"),
-                }
-            end
+			local cn=clip:GetName()
+			timeLines[cn]=clip
+            -- table.insert(timeLines, clip)
+			-- print(clip:GetClipProperty("In").." GetClipProperty(in) "..cn)
+			-- print(clip:GetClipProperty("Out").." GetClipProperty(out) "..cn)
+			-- mInOut[cn]={
+			-- 	MarkIn=clip:GetClipProperty("In"),
+			-- 	MarkOut=clip:GetClipProperty("Out"),
+			-- }
         else
             -- В моих проектах все клипы в одном каталоге
             dir = getDir(filePath)
         end
     end
     
-    return dir, timeLines, mInOut
+    return dir, timeLines --, mInOut
 end
 
 -- Функция для очистки имени файла
@@ -74,13 +82,13 @@ local function sanitizeFilename(name)
     return string.gsub(name, '^%s*(.-)%s*$', '%1')
 end
 
-local function exportFrameAsStill(pos, outputPath, timeline, timecode)
+local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip)
     -- Попробуем новый метод
     if type(Project.ExportCurrentFrameAsStill) == "function" then
-        local tc=timeline:GetCurrentTimecode(timecode)
+        local ctc=timeline:GetCurrentTimecode(timecode)
         timeline:SetCurrentTimecode(timecode)
         local ok=Project:ExportCurrentFrameAsStill(outputPath)
-        timeline:SetCurrentTimecode(tc)
+        timeline:SetCurrentTimecode(ctc)
         if ok then
             return true
         end
@@ -90,10 +98,14 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode)
     end
 
     -- План B через Deliver
+	-- Запомним
+	local preset=getBase(getDir(outputPath))
     local fac=Project:GetCurrentRenderFormatAndCodec()
+	Project:SaveAsNewRenderPreset(preset)
     if not Project:SetCurrentRenderFormatAndCodec(FORMAT, CODEC) then
         if not Project:SetCurrentRenderFormatAndCodec(FORMATb, CODECb) then
             print(string.format("Не удалось установить формат %s и кодек %s", FORMATb, CODECb))
+			-- Вспомним
             return false
         end
     end
@@ -101,24 +113,38 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode)
     local renderSettings = {
         MarkIn = pos,
         MarkOut = pos,
-        CustomName = getBase(outputPath),
-        TargetDir = getDir(outputPath),
-        ExportVideo = false,
-        ExportAudio = false
+        -- CustomName = getBase(outputPath),
+        -- TargetDir = getDir(outputPath),
+        -- ExportVideo = false,
+        -- ExportAudio = false
     }
 
+	local In=tlClip:GetClipProperty("In")
+	local Out=tlClip:GetClipProperty("Out")
     if not Project:SetRenderSettings(renderSettings) then
         print("Не удалось установить настройки рендера")
+		-- Вспомним
         return false
     end
 
 
+
     local jobId = Project:AddRenderJob()
-    local ok=jobId ~= ""
-    if ok then
-        RenderJobsAdded =true
+
+	local ok=jobId ~= ""
+    if jobId ~= "" then
+		ok=Project:StartRendering(jobId)
+		bmd.wait(1) --Stop the Script to a set amount of seconds
+		if ok then
+			Project:DeleteRenderJob(jobId)
+		end
+        RenderJobsAdded = ok
     end
+	-- Вспомним
     Project:SetCurrentRenderFormatAndCodec(fac.format, fac.codec)
+	Project:LoadRenderPreset(preset)
+	tlClip:SetClipProperty("In", In)
+	tlClip:SetClipProperty("Out", Out)
 
     return ok
 end
@@ -128,7 +154,7 @@ local function main()
     print("=== Экспорт метаданных ===")
 
     -- Получаем корневую папку и таймлайны
-    local output, tlClips, mInOut= rootTimeLines()
+    local output, tlClips= rootTimeLines()
     assert(output ~= "","Пустой медиапул")
     assert(next(tlClips) ,"Нет таймлайнов")
     bmd.createdir(output.."/tl")
@@ -142,9 +168,10 @@ local function main()
     local ctlName = ctl:GetName()
 
     local all = false
-    if resolve:GetCurrentPage() == "edit" then
-		print("С панели Edit только для "..ctlName)
+    if resolve:GetCurrentPage() ~= "media" then
+		print("С панелей кроме Media только "..ctlName)
     else
+		print("С панели Media для всех таймлайнов")
         all=true
     end
 
@@ -209,7 +236,7 @@ local function main()
                             fullPath = output .. "/tl/" .. name .. " " .. sanitizeFilename(marker.name) .. "." .. FORMAT
                         end
                        Project:SetCurrentTimeline(timeline)
-                       exportFrameAsStill(data.frame, fullPath, timeline, data.start_tc)
+                       exportFrameAsStill(data.frame, fullPath, timeline, data.start_tc, tlClips[tln])
                     else   
                         marker_table[#marker_table+1] = data
                     end
@@ -217,7 +244,7 @@ local function main()
             end
 
             if next(marker_table) then
-                export_subtitles(marker_table, "srt", file)
+                export_subtitles(marker_table, "srt", file, frame_rate)
             end
             
             -- Инициализируем таблицу для этого таймлайна
@@ -253,41 +280,35 @@ local function main()
 
     
     -- Экспортируем метаданные для каждого таймлайна
-    for _, tlClip in ipairs(tlClips) do
-        local tln = tlClip:GetName()
+    for tln, tlClip in pairs(tlClips) do
+        -- local tln = tlClip:GetName()
         if all or ctlName == tln then
-        else    
-            return
-        end
-        if RenderJobsAdded then
-            local inOut=mInOut[tln]
-            if inOut then
-                tlClip.SetClipProperty("In", inOut.In)
-                tlClip.SetClipProperty("Out", inOut.Out)
-            end
-        end
-        local name = sanitizeFilename(tln)
-        local file = output .. "/" .. name .. ".csv"
-        
-        -- Собираем клипы для экспорта (только из текущего таймлайна)
-        local exportClips = {tlClip}
-        
-        if tlm[tln] then
-            for mi, mpi in pairs(tlm[tln]) do
-                table.insert(exportClips, mpi)
-            end
-        end
-        
-        -- Экспортируем метаданные
-        print("Метаданные ~>", file)
-        if MediaPool:ExportMetadata(file, exportClips) then
-            Exported = Exported+1
+			if true or RenderJobsAdded then
+				
+			end
+			local name = sanitizeFilename(tln)
+			local file = output .. "/" .. name .. ".csv"
+			
+			-- Собираем клипы для экспорта (только из текущего таймлайна)
+			local exportClips = {tlClip}
+			
+			if tlm[tln] then
+				for mi, mpi in pairs(tlm[tln]) do
+					table.insert(exportClips, mpi)
+				end
+			end
+			
+			-- Экспортируем метаданные
+			print("Метаданные ~>", file)
+			if MediaPool:ExportMetadata(file, exportClips) then
+				Exported = Exported+1
+			end
         end
     end
     print(string.format("=== Экспортировано %d из %d ===", Exported,  tlc))
 
     if RenderJobsAdded then
-        Project:StartRendering()
+        -- Project:StartRendering()
     end
 end
 
@@ -357,7 +378,7 @@ local function export_youtube_chapters(marker_table, filename)
     write_file(filename, table.concat(chapters, "\n"))
 end
 
-function export_subtitles(marker_table, format, filename)
+function export_subtitles(marker_table, format, filename,frame_rate)
     local subtitles = {}
 
     if format == "webvtt" then
@@ -404,6 +425,8 @@ luaresolve =
 					local is_decimal = current_frame_rate % 1 > 0
 					local denominator = iif(is_decimal, 1001, 100)
 					local numerator = math.ceil(current_frame_rate) * iif(is_decimal, 1000, denominator)
+-- print("numerator "..numerator)
+-- print("denominator "..denominator)
 					return { num = numerator, den = denominator }
 				end
 			end
