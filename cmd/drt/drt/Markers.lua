@@ -211,9 +211,10 @@ local function sanitizeFilename(name)
 end
 
 -- Функция экспорта кадра
-local function exportFrameAsStill(pos, outputPath)
+local function exportFrameAsStill(pos, outputPath, timecode, timeline)
     -- Попробуем новый метод
     if type(Project.ExportCurrentFrameAsStill) == "function" then
+        timeline:SetCurrentTimecode(timecode)
         if Project:ExportCurrentFrameAsStill(outputPath) then
             return true
         end
@@ -223,23 +224,6 @@ local function exportFrameAsStill(pos, outputPath)
     end
 
     -- План B через Deliver
-    local timeline = Project:GetCurrentTimeline()
-    local startFrame = timeline:GetStartFrame()
-
-    local renderSettings = {
-        MarkIn = startFrame + pos,
-        MarkOut = startFrame + pos,
-        CustomName = string.gsub(outputPath:match("([^/\\]+)$"), "%..+$", ""),
-        TargetDir = OutputFolder,
-        ExportVideo = false,
-        ExportAudio = false
-    }
-
-    if not Project:SetRenderSettings(renderSettings) then
-        print("Не удалось установить настройки рендера")
-        return false
-    end
-
     if not Project:SetCurrentRenderFormatAndCodec(FORMAT, CODEC) then
         if not Project:SetCurrentRenderFormatAndCodec(FORMATb, CODECb) then
             print(string.format("Не удалось установить формат %s и кодек %s", FORMATb, CODECb))
@@ -247,11 +231,29 @@ local function exportFrameAsStill(pos, outputPath)
         end
     end
 
-    local jobId = Project:AddRenderJob()
-    if jobId ~= "" then
-        RenderJobsAdded =true
+    local MarkIn=timeline.GetProperty("In")
+    local MarkOut=timeline.GetProperty("Out")
+    local renderSettings = {
+        MarkIn = pos,
+        MarkOut = pos,
+        CustomName = string.gsub(outputPath:match("([^/\\]+)$"), "%..+$", ""),
+        TargetDir = OutputFolder,
+        ExportVideo = false,
+        ExportAudio = false
+    }
+
+    if Project:SetRenderSettings(renderSettings) then
+        local jobId = Project:AddRenderJob()
+        if jobId ~= "" then
+            RenderJobsAdded =true
+            return true
+        end
+        timeline.SetProperty("In", MarkIn)
+        timeline.GetProperty("Out", MarkOut)
+    else
+        print("Не удалось установить настройки рендера")
     end
-    return true
+    return false
 end
 
 -- Функция экспорта помеченных кадров
@@ -276,25 +278,24 @@ local function exportMarkedFrames()
     -- Экспорт кадров
     for _, pos in ipairs(positions) do
         local marker = markers[pos]
-        local name = marker.name
-        if name == "Marker 1" then
-            name = ""
+        local name = ""
+        if  marker.name ~= "Marker 1" or marker.note ~= "" then
+            name=" "..marker.name
         end
 
         --local timecode = timeToTimecode(pos / FrameRate, FrameRate)
-        
+
         -- https://github.com/rogmag/rogmag.github.io/blob/main/downloads/creating_davinci_resolve_scripts/scripts/utility/libavutil/Libavutil.lua
         local startFrame = timeline:GetStartFrame()
         local frame_rate = luaresolve.frame_rates:get_decimal(timeline:GetSetting("timelineFrameRate"))
         local drop_frame = timeline:GetSetting("timelineDropFrameTimecode") == "1"
         local frame = startFrame + pos
         local timecode = luaresolve:timecode_from_frame(frame, frame_rate, drop_frame)
-        timeline:SetCurrentTimecode(timecode)
-
+ 
         local filename = timelineName .. name
         local fullPath = OutputFolder .. "/" .. filename .. "." .. FORMAT
 
-        if exportFrameAsStill(pos, fullPath) then
+        if exportFrameAsStill(pos, fullPath, timecode, timeline) then
             print(string.format("Экспортирован %s -> %s", timecode, filename))
             Exported = Exported + 1
         else
