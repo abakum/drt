@@ -232,7 +232,9 @@ end
 local function universalCall(func, ...)
     -- Проверка на не-ASCII символы
     local function hasNonAscii(text)
-        return text and text:match("[^\x00-\x7F]")
+        if type(text) ~= "string" then return false end
+        -- Ищем любой байт с установленным 8-м битом (коды 128-255)
+        return text:match("[\128-\255]") ~= nil
     end
 
     local isWindows = package.config:sub(1, 1) == "\\"
