@@ -76,16 +76,16 @@ end
 
 local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, frame_rate)
     -- Попробуем новый метод
-	local base=getBase(outputPath)
-    dump({
-    pos=pos,
-    outputPath=outputPath,
-    timeline=timeline,
-    timecode=timecode,
-    tlClip=tlClip,
-    frame_rate=frame_rate,
-	base=base,
-    })
+	local CustomName=getBase(outputPath)
+    -- dump({
+    -- pos=pos,
+    -- outputPath=outputPath,
+    -- timeline=timeline,
+    -- timecode=timecode,
+    -- tlClip=tlClip,
+    -- frame_rate=frame_rate,
+	-- CustomName=CustomName,
+    -- })
     local ext=FORMAT
     if type(Project.ExportCurrentFrameAsStill) == "function" then
         local ctc=timeline:GetCurrentTimecode(timecode)
@@ -108,8 +108,10 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 	local preset=getBase(output)
 
 
-	-- local fac=Project:GetCurrentRenderFormatAndCodec()
 	Project:SaveAsNewRenderPreset(preset)
+	if type(Project.ExportRenderPreset)== "function" then
+		Project:ExportRenderPreset(preset,output.."/"..preset)
+	end
     if not Project:SetCurrentRenderFormatAndCodec(ext, CODEC) then
 		ext=FORMATb
         if not Project:SetCurrentRenderFormatAndCodec(ext, CODECb) then
@@ -125,8 +127,7 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
         MarkIn = pos,
         MarkOut = pos,
         TargetDir =output,
-        CustomName = base,
-        -- OutputFilename=getBase(outputPath),
+        CustomName = CustomName, -- Для этого установи Filename uses в Custom name а его в %timeline
     }
 
     if not Project:SetRenderSettings(renderSettings) then
@@ -159,42 +160,37 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
      end
 
 	 -- Вспомним
-	--if tlClip:SetClipProperty("In", In) and tlClip:SetClipProperty("Out", Out) then
+	if tlClip:SetClipProperty("In", In) and tlClip:SetClipProperty("Out", Out) then
  	-- Работает в 19
-	--else
+	else
  	-- Работает в 17 
 		renderSettings.MarkIn=luaresolve:frame_from_timecode(In, frame_rate)
 		renderSettings.MarkOut=luaresolve:frame_from_timecode(Out, frame_rate)
-  		renderSettings.CustomName = timeline:GetName()
 		Project:SetRenderSettings(renderSettings)
-	--end
+	end
 
-	-- Project:SetCurrentRenderFormatAndCodec(fac.format, fac.codec)
 	Project:LoadRenderPreset(preset)
 
-	if false then
+	if ok then
 		print(outputPath.."*."..ext)
 		-- MediaStorage:RevealInStorage(output)
-		-- local paths=MediaStorage:GetFileList(output.."/")
+		-- dump({GetFileList=MediaStorage:GetFileList("c:/tmp")})
 		-- local paths=MediaStorage:GetFiles(output.."/")
 		local paths=bmd.readdir(outputPath.."*."..ext)
-  --dump(paths)
 		if paths and next(paths) then
 			for i, v in ipairs(paths) do
 				--local path=paths.Parent..v.Name
-    local oldpath=paths.Parent..v.Name
-    local newname=FixDRd8(v.Name, ext)
-    local newpath=oldpath:gsub(v.Name, newname)
-    local base=getBase(file)
-    if newname==base then
-       dump({oldpath=oldpath,newpath=newpath})
-       --dump(os.rename(oldpath, newpath))
-       --dump(rename(oldpath, newpath))
-       --dump(os.rename(oldpath, base))
-       --dump(ffmpeg(oldpath, outputPath.."."..FORMAT))
-       --dump(bmd:rename(oldpath, newpath))
-       dump(package.config)
-    end
+				local oldpath=paths.Parent..v.Name
+				local newname=TrimFrame(v.Name, ext)
+				local newpath=oldpath:gsub(v.Name, newname)
+				local base=getBase(file)
+				if newname==base then
+					dump({oldpath=oldpath,newpath=newpath,base=base})
+					-- dump(os.rename(oldpath, newpath))
+					dump(rename(oldpath, base))
+					-- dump(os.rename(oldpath, base))
+					-- dump(ffmpeg(oldpath, outputPath.."."..FORMAT))
+				end
 			end
 		end
 	end
@@ -202,29 +198,117 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 	return ok
 end
 
-function rename(oldpath, newpath)
-    -- Экранируем пути для командной строки
-    local oldpath = '"' .. oldpath .. '"'
-    local newpath = '"' .. newpath .. '"'
-    -- Для Linux/Mac используем mv
-    local cmd="mv " .. oldpath .. " " .. newpath
-    if package.config:sub(1,1) == "\\" then
-        -- Для Windows используем команду rename
-        cmd="rename " .. oldpath .. " " .. newpath
+local function createTempFile(prefix, suffix)
+    prefix = prefix or "temp_"
+    suffix = suffix or ""
+    
+    -- Создаем уникальное имя файла
+    local tempname = os.tmpname()
+    
+    -- Удаляем возможный префикс пути (в некоторых реализациях Lua)
+    tempname = tempname:match("[^\\/]+$") or tempname
+    
+    -- Формируем полное имя с учетом префикса и суффикса
+    local filename = prefix .. tempname .. suffix
+    
+    -- Создаем файл (возвращаем файловый объект и имя файла)
+    local file, err = io.open(filename, "w+")
+    if not file then
+        return nil, "Failed to create temp file: " .. (err or "unknown error")
     end
-    cmd="ffmpeg -i "..oldpath.." -y "..newpath
-    print(cmd)
-    return os.execute(cmd)
+    
+    return {
+        file = file,
+        name = filename,
+        close = function(self)
+            if self.file then
+                self.file:close()
+                os.remove(self.name)
+            end
+        end
+    }
 end
+
+local function universalCall(func, ...)
+    -- Проверка на не-ASCII символы
+    local function hasNonAscii(text)
+        return text and text:match("[^\x00-\x7F]")
+    end
+
+    local isWindows = package.config:sub(1, 1) == "\\"
+    local args = {...}
+    
+    -- Проверяем необходимость BAT-файла
+    local needsBat = isWindows and (
+        func == os.rename and 
+        (hasNonAscii(args[1]) or hasNonAscii(args[2]))
+    )
+
+    if not needsBat then
+        -- Прямой вызов для простых случаев
+        if func == os.rename then
+            return os.rename(...)
+        else
+            local success, exit_type, exit_code = os.execute(...)
+            if not success then
+                return false, "Command failed (Status: "..tostring(exit_code)..")"
+            end
+            return true
+        end
+    end
+
+    -- Создание временного BAT-файла
+    local tempPath = os.getenv("TEMP") or "."
+    local batFile = io.open(tempPath.."\\temp_utf8.bat", "w")
+    if not batFile then return false, "Failed to create BAT file" end
+
+    if func == os.rename then
+        local newName = args[2]:match("[^\\/]+$") or args[2]
+        batFile:write(
+            "@chcp 65001 > nul\n"..
+            "@rename \""..args[1].."\" \""..newName.."\"\n"
+        )
+    else
+        batFile:write(
+            "@chcp 65001 > nul\n"..
+            "@"..table.concat(args, " ").."\n"
+        )
+    end
+    batFile:close()
+
+    -- Выполнение с обработкой результата
+    local success, _, status = os.execute('"'..tempPath..'\\temp_utf8.bat"')
+    os.remove(tempPath.."\\temp_utf8.bat")
+
+    if func == os.rename then
+        return success
+    else
+        if success then
+            return true
+        else
+            return false, "Command failed (Status: "..tostring(status)..")"
+        end
+    end
+end
+
+-- Обертки с четкой сигнатурой возврата
+function rename(oldName, newName)
+    return universalCall(os.rename, oldName, newName)  -- всегда возвращает bool
+end
+
+function execute(command)
+    return universalCall(os.execute, command)  -- возвращает bool [, error_message]
+end
+
 
 function ffmpeg(oldpath, newpath)
     -- Экранируем пути для командной строки
     local oldpath = '"' .. oldpath .. '"'
     local newpath = '"' .. newpath .. '"'
     -- Для Linux/Mac используем mv
-    local cmd="ffmpeg -i "..oldpath.." -y "..newpath
-    print(cmd)
-    return os.execute(cmd)
+    local command="ffmpeg -i "..oldpath.." -y "..newpath
+    print(command)
+    return execute(command)
 end
 
 
@@ -385,7 +469,7 @@ local function main()
 
 end
 
-function FixDRd8(file, ext)
+function TrimFrame(file, ext)
     return file:gsub("(_?%d%d%d%d%d%d%d%d)(%." .. ext .. ")$", "%2")
 end
 
@@ -502,8 +586,6 @@ luaresolve =
 					local is_decimal = current_frame_rate % 1 > 0
 					local denominator = iif(is_decimal, 1001, 100)
 					local numerator = math.ceil(current_frame_rate) * iif(is_decimal, 1000, denominator)
--- print("numerator "..numerator)
--- print("denominator "..denominator)
 					return { num = numerator, den = denominator }
 				end
 			end
@@ -728,8 +810,8 @@ libavutil =
 
 	av_timecode_make_string = function(self, start, frame, fps, flags)
 		local function bor_number_flags(enum_name, flags)
-			local enum_value = 0    
-	
+			local enum_value = 0
+
 			if (flags) then
 				for key, value in pairs(flags) do
 					if (value == true) then
