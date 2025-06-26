@@ -76,7 +76,17 @@ end
 
 local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, frame_rate)
     -- Попробуем новый метод
-	local ext=FORMAT
+	local base=getBase(outputPath)
+    dump({
+    pos=pos,
+    outputPath=outputPath,
+    timeline=timeline,
+    timecode=timecode,
+    tlClip=tlClip,
+    frame_rate=frame_rate,
+	base=base,
+    })
+    local ext=FORMAT
     if type(Project.ExportCurrentFrameAsStill) == "function" then
         local ctc=timeline:GetCurrentTimecode(timecode)
         timeline:SetCurrentTimecode(timecode)
@@ -114,7 +124,9 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 	local renderSettings = {
         MarkIn = pos,
         MarkOut = pos,
-		TargetDir = output,
+        TargetDir =output,
+        CustomName = base,
+        -- OutputFilename=getBase(outputPath),
     }
 
     if not Project:SetRenderSettings(renderSettings) then
@@ -147,38 +159,42 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
      end
 
 	 -- Вспомним
-	if tlClip:SetClipProperty("In", In) and tlClip:SetClipProperty("Out", Out) then
+	--if tlClip:SetClipProperty("In", In) and tlClip:SetClipProperty("Out", Out) then
  	-- Работает в 19
-	else
+	--else
  	-- Работает в 17 
 		renderSettings.MarkIn=luaresolve:frame_from_timecode(In, frame_rate)
 		renderSettings.MarkOut=luaresolve:frame_from_timecode(Out, frame_rate)
+  		renderSettings.CustomName = timeline:GetName()
 		Project:SetRenderSettings(renderSettings)
-	end
+	--end
 
 	-- Project:SetCurrentRenderFormatAndCodec(fac.format, fac.codec)
 	Project:LoadRenderPreset(preset)
 
 	if false then
-		-- На 17 не удалось переименовать
 		print(outputPath.."*."..ext)
+		-- MediaStorage:RevealInStorage(output)
+		-- local paths=MediaStorage:GetFileList(output.."/")
+		-- local paths=MediaStorage:GetFiles(output.."/")
 		local paths=bmd.readdir(outputPath.."*."..ext)
-  		--dump(paths)
+  --dump(paths)
 		if paths and next(paths) then
 			for i, v in ipairs(paths) do
 				--local path=paths.Parent..v.Name
-				local oldpath=paths.Parent..v.Name
-				local newname=FixDRd8(v.Name, ext)
-				local base=getBase(file)
-				if newname==base then
-					local newpath=oldpath:gsub(v.Name, base)
-					dump({oldpath=oldpath,newpath=newpath})
-					--dump(os.rename(oldpath, newpath))
-					--dump(rename(oldpath, newpath))
-					--dump(os.rename(oldpath, base))
-					--dump(ffmpeg(oldpath, outputPath.."."..FORMAT))
-					--dump(bmd:rename(oldpath, newpath))
-				end
+    local oldpath=paths.Parent..v.Name
+    local newname=FixDRd8(v.Name, ext)
+    local newpath=oldpath:gsub(v.Name, newname)
+    local base=getBase(file)
+    if newname==base then
+       dump({oldpath=oldpath,newpath=newpath})
+       --dump(os.rename(oldpath, newpath))
+       --dump(rename(oldpath, newpath))
+       --dump(os.rename(oldpath, base))
+       --dump(ffmpeg(oldpath, outputPath.."."..FORMAT))
+       --dump(bmd:rename(oldpath, newpath))
+       dump(package.config)
+    end
 			end
 		end
 	end
@@ -210,6 +226,8 @@ function ffmpeg(oldpath, newpath)
     print(cmd)
     return os.execute(cmd)
 end
+
+
 -- Основная функция
 local function main()
     print("=== Экспорт метаданных ===")
