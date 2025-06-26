@@ -17,8 +17,8 @@ Project = assert(projectManager:GetCurrentProject(),"GetCurrentProject")
 MediaPool = assert(Project:GetMediaPool(),"GetMediaPool")
 RootFolder = assert(MediaPool:GetRootFolder(),"GetRootFolder")
 Clips =  assert(RootFolder:GetClipList(),"GetClipList")
+MediaStorage = assert(resolve:GetMediaStorage(),"GetMediaStorage")
 Exported = 0
-RenderJobsAdded=false
 
 local FORMAT = "png"
 local CODEC = "RGB8"
@@ -51,15 +51,7 @@ local function rootTimeLines()
         local filePath = clip:GetClipProperty("File Path")
         if filePath == "" then
             -- Это таймлайн
-			local cn=clip:GetName()
-			timeLines[cn]=clip
-            -- table.insert(timeLines, clip)
-			-- print(clip:GetClipProperty("In").." GetClipProperty(in) "..cn)
-			-- print(clip:GetClipProperty("Out").." GetClipProperty(out) "..cn)
-			-- mInOut[cn]={
-			-- 	MarkIn=clip:GetClipProperty("In"),
-			-- 	MarkOut=clip:GetClipProperty("Out"),
-			-- }
+			timeLines[clip:GetName()]=clip
         else
             -- В моих проектах все клипы в одном каталоге
             dir = getDir(filePath)
@@ -84,10 +76,11 @@ end
 
 local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, frame_rate)
     -- Попробуем новый метод
+	local ext=FORMAT
     if type(Project.ExportCurrentFrameAsStill) == "function" then
         local ctc=timeline:GetCurrentTimecode(timecode)
         timeline:SetCurrentTimecode(timecode)
-        local ok=Project:ExportCurrentFrameAsStill(outputPath)
+        local ok=Project:ExportCurrentFrameAsStill(outputPath.."."..ext)
         timeline:SetCurrentTimecode(ctc)
         if ok then
             return true
@@ -101,31 +94,27 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 	-- Запомним
 	local In=tlClip:GetClipProperty("In")
 	local Out=tlClip:GetClipProperty("Out")
-	local rs = {
-			MarkIn = luaresolve:frame_from_timecode(In, frame_rate),
-			MarkOut = luaresolve:frame_from_timecode(Out, frame_rate),
-	}
-	-- print(In.." " ..rs.MarkIn)
-	-- print(Out.." " ..rs.MarkOut)
- 
-	local preset=getBase(getDir(outputPath))
-	local fac=Project:GetCurrentRenderFormatAndCodec()
+	local output=getDir(outputPath)
+	local preset=getBase(output)
+
+
+	-- local fac=Project:GetCurrentRenderFormatAndCodec()
 	Project:SaveAsNewRenderPreset(preset)
-    if not Project:SetCurrentRenderFormatAndCodec(FORMAT, CODEC) then
-        if not Project:SetCurrentRenderFormatAndCodec(FORMATb, CODECb) then
+    if not Project:SetCurrentRenderFormatAndCodec(ext, CODEC) then
+		ext=FORMATb
+        if not Project:SetCurrentRenderFormatAndCodec(ext, CODECb) then
             print(string.format("Не удалось установить формат %s и кодек %s", FORMATb, CODECb))
 			-- Вспомним
             return false
         end
     end
 
-    local renderSettings = {
+	local file=outputPath.."."..ext
+
+	local renderSettings = {
         MarkIn = pos,
         MarkOut = pos,
-        -- CustomName = getBase(outputPath),
-        -- TargetDir = getDir(outputPath),
-        -- ExportVideo = false,
-        -- ExportAudio = false
+		TargetDir = output,
     }
 
     if not Project:SetRenderSettings(renderSettings) then
@@ -140,29 +129,92 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 	local ok=jobId ~= ""
     if jobId ~= "" then
 		ok=Project:StartRendering(jobId)
-		bmd.wait(1) --Stop the Script to a set amount of seconds
 		if ok then
-			Project:DeleteRenderJob(jobId)
+			ok=false
+			for i=1, 10 do
+				bmd.wait(1) --Stop the Script to a set amount of seconds
+				if not Project:IsRenderingInProgress() then
+					ok=true
+					break
+				end
+			end
+			if ok then
+				Project:DeleteRenderJob(jobId)
+			else
+				Project:StopRendering()
+			end
 		end
-        RenderJobsAdded = ok
-    end
-	-- Вспомним
-	Project:SetRenderSettings(rs)
-	Project:SetCurrentRenderFormatAndCodec(fac.format, fac.codec)
+     end
+
+	 -- Вспомним
+	if tlClip:SetClipProperty("In", In) and tlClip:SetClipProperty("Out", Out) then
+ 	-- Работает в 19
+	else
+ 	-- Работает в 17 
+		renderSettings.MarkIn=luaresolve:frame_from_timecode(In, frame_rate)
+		renderSettings.MarkOut=luaresolve:frame_from_timecode(Out, frame_rate)
+		Project:SetRenderSettings(renderSettings)
+	end
+
+	-- Project:SetCurrentRenderFormatAndCodec(fac.format, fac.codec)
 	Project:LoadRenderPreset(preset)
 
-	-- Вспомним
- 	-- Работает в 19 но не в 17 
-	--print(tlClip:SetClipProperty("In", In))
-	--print(tlClip:SetClipProperty("Out", Out))
- return ok
+	if false then
+		-- На 17 не удалось переименовать
+		print(outputPath.."*."..ext)
+		local paths=bmd.readdir(outputPath.."*."..ext)
+  		--dump(paths)
+		if paths and next(paths) then
+			for i, v in ipairs(paths) do
+				--local path=paths.Parent..v.Name
+				local oldpath=paths.Parent..v.Name
+				local newname=FixDRd8(v.Name, ext)
+				local base=getBase(file)
+				if newname==base then
+					local newpath=oldpath:gsub(v.Name, base)
+					dump({oldpath=oldpath,newpath=newpath})
+					--dump(os.rename(oldpath, newpath))
+					--dump(rename(oldpath, newpath))
+					--dump(os.rename(oldpath, base))
+					--dump(ffmpeg(oldpath, outputPath.."."..FORMAT))
+					--dump(bmd:rename(oldpath, newpath))
+				end
+			end
+		end
+	end
+
+	return ok
 end
 
+function rename(oldpath, newpath)
+    -- Экранируем пути для командной строки
+    local oldpath = '"' .. oldpath .. '"'
+    local newpath = '"' .. newpath .. '"'
+    -- Для Linux/Mac используем mv
+    local cmd="mv " .. oldpath .. " " .. newpath
+    if package.config:sub(1,1) == "\\" then
+        -- Для Windows используем команду rename
+        cmd="rename " .. oldpath .. " " .. newpath
+    end
+    cmd="ffmpeg -i "..oldpath.." -y "..newpath
+    print(cmd)
+    return os.execute(cmd)
+end
+
+function ffmpeg(oldpath, newpath)
+    -- Экранируем пути для командной строки
+    local oldpath = '"' .. oldpath .. '"'
+    local newpath = '"' .. newpath .. '"'
+    -- Для Linux/Mac используем mv
+    local cmd="ffmpeg -i "..oldpath.." -y "..newpath
+    print(cmd)
+    return os.execute(cmd)
+end
 -- Основная функция
 local function main()
     print("=== Экспорт метаданных ===")
 
-    -- Получаем корневую папку и таймлайны
+    -- Получаем корневую папку и таймлайны как mediaPoolItem
     local output, tlClips= rootTimeLines()
     assert(output ~= "","Пустой медиапул")
     assert(next(tlClips) ,"Нет таймлайнов")
@@ -240,9 +292,9 @@ local function main()
                     }
                     if marker.note == "" then
                         -- Без описания значит картинка
-                        local fullPath = output .. "/" .. name .. "." .. FORMAT
+                        local fullPath = output .. "/" .. name
                         if marker.name ~= "Marker 1" then
-                            fullPath = output .. "/tl/" .. name .. " " .. sanitizeFilename(marker.name) .. "." .. FORMAT
+                            fullPath = output .. "/" .. name .. " " .. sanitizeFilename(marker.name)
                         end
                        Project:SetCurrentTimeline(timeline)
                        exportFrameAsStill(data.frame, fullPath, timeline, data.start_tc, tlClips[tln], frame_rate)
@@ -292,9 +344,6 @@ local function main()
     for tln, tlClip in pairs(tlClips) do
         -- local tln = tlClip:GetName()
         if all or ctlName == tln then
-			if true or RenderJobsAdded then
-				
-			end
 			local name = sanitizeFilename(tln)
 			local file = output .. "/" .. name .. ".csv"
 			
@@ -316,9 +365,10 @@ local function main()
     end
     print(string.format("=== Экспортировано %d из %d ===", Exported,  tlc))
 
-    if RenderJobsAdded then
-        -- Project:StartRendering()
-    end
+end
+
+function FixDRd8(file, ext)
+    return file:gsub("(_?%d%d%d%d%d%d%d%d)(%." .. ext .. ")$", "%2")
 end
 
 -- https://github.com/rogmag/rogmag.github.io
