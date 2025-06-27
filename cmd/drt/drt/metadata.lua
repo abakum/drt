@@ -25,6 +25,7 @@ local FORMAT = "png"
 local CODEC = "RGB8"
 local FORMATb = "tif"
 local CODECb = "RGB8LZW"
+local TL ="/tl/"
 
 local function getDir(path)
     -- Replace all backslashes with forward slashes for consistency
@@ -235,20 +236,30 @@ local function createTempFile(suffix)
     }
 end
 
-local function universalCall(func, ...)
-    -- Проверка на не-ASCII символы
-    local function hasNonAscii(text)
-        if type(text) ~= "string" then return false end
-        return text:match("[\128-\255]") ~= nil
-    end
+function HasNonAscii(text)
+	if type(text) ~= "string" then return false end
+	return text:match("[\128-\255]") ~= nil
+end
 
-    local args = {...}
+function Quote(s)
+    -- Проверяем, что аргумент - строка
+    if type(s) ~= "string" then return s end
     
-    -- Проверяем необходимость временного файла
-    local needsTempFile = Windows and (
-        func == os.rename and 
-        (hasNonAscii(args[1]) or hasNonAscii(args[2]))
-    )
+    -- Если есть пробелы и строка ещё не в кавычках
+    if s:find("%s") and not (s:sub(1,1) == '"' and s:sub(-1) == '"') then
+        return '"' .. s .. '"'
+    end
+    return s
+end
+
+local function renameExecute(func, ...)
+    local args = {}
+	local needsTempFile = false
+	for _,arg in ipairs({...}) do
+		needsTempFile=needsTempFile or HasNonAscii(arg)
+		args[#args+1]=Quote(arg)
+	end
+    needsTempFile=needsTempFile and Windows
 
     if not needsTempFile then
         -- Прямой вызов для простых случаев
@@ -257,7 +268,7 @@ local function universalCall(func, ...)
         else
             local success, exit_type, exit_code = os.execute(...)
             if not success then
-                return false, "Command failed (Status: "..tostring(exit_code)..")"
+                return false, exit_type.." "..tostring(exit_code)
             end
             return true
         end
@@ -270,26 +281,17 @@ local function universalCall(func, ...)
     end
 
     -- Записываем команды в BAT-файл
+	local command="@chcp 65001\n"
     if func == os.rename then
-        local oldPath = args[1]
-        local newPath = args[2]
-        local newName = newPath:match("[^\\/]+$") or newPath
-        temp.file:write(
-            "@chcp 65001 > nul\n"..
-            "@del /q \""..newPath.."\"\n"..
-            "@rename \""..oldPath.."\" \""..newName.."\"\n"
-        )
-        --    "@if exist \""..newPath.."\" del /q \""..newPath.."\" >nul 2>&1\n"..
-    else
-        temp.file:write(
-            "@chcp 65001 > nul\n"..
-            "@"..table.concat(args, " ").."\n"
-        )
+		command=command.."move /y "
     end
+	command=command..table.concat(args, " ").."\n"
+	print(command)
+	temp.file:write(command)
     temp.file:close()
 
     -- Выполнение с обработкой результата
-    local success, _, status = os.execute('"'..temp.name..'"')
+    local success, exit_type, exit_code = os.execute(Quote(temp.name))
     
     -- Автоматическое удаление временного файла через метод close
     temp:close()
@@ -300,29 +302,18 @@ local function universalCall(func, ...)
         if success then
             return true
         else
-            return false, "Command failed (Status: "..tostring(status)..")"
+            return false, exit_type.." "..tostring(exit_code)
         end
     end
 end
 
 -- Обертки с четкой сигнатурой возврата
 function rename(oldName, newName)
-    return universalCall(os.rename, oldName, newName)  -- всегда возвращает bool
+    return renameExecute(os.rename, oldName, newName)  -- всегда возвращает bool
 end
-
-function execute(command)
-    return universalCall(os.execute, command)  -- возвращает bool [, error_message]
-end
-
 
 function ffmpeg(oldpath, newpath)
-    -- Экранируем пути для командной строки
-    local oldpath = '"' .. oldpath .. '"'
-    local newpath = '"' .. newpath .. '"'
-    -- Для Linux/Mac используем mv
-    local command="ffmpeg -i "..oldpath.." -y "..newpath
-    print(command)
-    return execute(command)
+    return renameExecute(os.execute, "ffmpeg", "-i", oldpath, newpath)
 end
 
 
@@ -334,7 +325,7 @@ local function main()
     local output, tlClips= rootTimeLines()
     assert(output ~= "","Пустой медиапул")
     assert(next(tlClips) ,"Нет таймлайнов")
-    bmd.createdir(output.."/tl")
+    bmd.createdir(output.."TL")
     
     -- Таблица для хранения клипов по таймлайнам и mediaId
     local tlm = {} -- структура: tlm[timelineName][mediaId] = mediaPoolItem
@@ -345,7 +336,8 @@ local function main()
     local ctlName = ctl:GetName()
 
     local all = false
-    if resolve:GetCurrentPage() ~= "media" then
+	local currentPage=resolve:GetCurrentPage()
+    if currentPage ~= "media" then
 		print("С панелей кроме Media только "..ctlName)
     else
 		print("С панели Media для всех таймлайнов")
@@ -362,12 +354,12 @@ local function main()
             local frame_rate = luaresolve.frame_rates:get_decimal(timeline:GetSetting("timelineFrameRate"))
             local drop_frame = timeline:GetSetting("timelineDropFrameTimecode") == "1"
             local name = sanitizeFilename(tln)
-            local file = output .. "/tl/" .. name .. ".drt"
+            local file = output .. TL .. name .. ".drt"
             if not all then
                 -- Экспортируем в .drt
                 timeline:Export(file, resolve.EXPORT_DRT, resolve.EXPORT_NONE)
             end
-            file = output .. "/tl/" .. name .. ".srt"
+            file = output .. TL .. name .. ".srt"
 
             local markers = timeline:GetMarkers()
             local marker_frames = {}
@@ -381,46 +373,55 @@ local function main()
             -- Sort the table
             table.sort(marker_frames)
 
-            -- local timeline_start = 0
-            local timeline_start = timeline:GetStartFrame()
             local count = 0
             local color="Blue"
+			local timeline_start = timeline:GetStartFrame()
+			local In=tlClips[tln]:GetClipProperty("In")
+			local Inf=luaresolve:frame_from_timecode(In, frame_rate)
 
             for _, frame in ipairs(marker_frames) do
+				local recordF = math.max(0,frame-Inf)
+				local sourceF = timeline_start+frame
                 local marker = markers[frame]
 
                 if all or color == marker.color then
                     count = count + 1
                     
-                    local data = 
-                    {
-                        index = count,
-                        frame = timeline_start + frame,
-                        name = marker.name,
-                        start_tc = luaresolve:timecode_from_frame(timeline_start + frame, frame_rate, drop_frame),
-                        end_tc = luaresolve:timecode_from_frame(timeline_start + frame + marker.duration, frame_rate, drop_frame),
-                        duration_tc = luaresolve:timecode_from_frame(marker.duration, frame_rate, drop_frame),
-                        duration_time = luaresolve:time_from_frame(marker.duration, frame_rate).time,
-                        duration_frames = marker.duration,
-                        color = marker.color,
-                        note = marker.note,
-                        custom_data = marker.customData,
-                    }
-                    if marker.note == "" then
-                        -- Без описания значит картинка
+                    if marker.note == "" or marker.duration==1 then
+                        -- Без описания или короткое значит картинка
                         local fullPath = output .. "/" .. name
                         if marker.name ~= "Marker 1" then
                             fullPath = output .. "/" .. name .. " " .. sanitizeFilename(marker.name)
                         end
                        Project:SetCurrentTimeline(timeline)
-                       exportFrameAsStill(data.frame, fullPath, timeline, data.start_tc, tlClips[tln], frame_rate)
+                       exportFrameAsStill(sourceF,
+					    fullPath, 
+						timeline,
+						luaresolve:timecode_from_frame(sourceF, frame_rate, drop_frame),
+						tlClips[tln],
+						frame_rate)
                     else
+						local data =
+						{
+							index = count,
+							frame = recordF,
+							name = marker.name,
+							start_tc = luaresolve:timecode_from_frame(recordF, frame_rate, drop_frame),
+							end_tc = luaresolve:timecode_from_frame(recordF + frame + marker.duration, frame_rate, drop_frame),
+							duration_tc = luaresolve:timecode_from_frame(marker.duration, frame_rate, drop_frame),
+							duration_time = luaresolve:time_from_frame(marker.duration, frame_rate).time,
+							duration_frames = marker.duration,
+							color = marker.color,
+							note = marker.note,
+							custom_data = marker.customData,
+						}
                         marker_table[#marker_table+1] = data
                     end
                 end
             end
 
             if next(marker_table) then
+				dump(marker_table)
                 export_subtitles(marker_table, "srt", file, frame_rate)
             end
             
@@ -473,14 +474,14 @@ local function main()
 			end
 			
 			-- Экспортируем метаданные
-			print("Метаданные ~>", file)
+			print("Метаданные ~> ", file)
 			if MediaPool:ExportMetadata(file, exportClips) then
 				Exported = Exported+1
 			end
         end
     end
     print(string.format("=== Экспортировано %d из %d ===", Exported,  tlc))
-
+	resolve:SetCurrentPage(currentPage)
 end
 
 function TrimFrame(file, ext)
@@ -490,7 +491,19 @@ end
 -- https://github.com/rogmag/rogmag.github.io
 
 local function write_file(filename, content)
-    local file_handle = assert(io.open(filename, "w+"))
+	if Windows and HasNonAscii(filename) then
+		local temp=createTempFile("")
+		if temp then
+		    local file_handle = temp.file
+			assert(file_handle:write(content))
+			assert(file_handle:close())
+
+			rename(temp.name, filename)
+			temp:close()
+			return
+		end
+	end
+	local file_handle = assert(io.open(filename, "w+"))
     assert(file_handle:write(content))
     assert(file_handle:close())
 end
