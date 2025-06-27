@@ -97,7 +97,7 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
         if ok then
             return true
         end
-        if resolve:GetCurrentPage() == "deliver" then
+        if Page == "deliver" then
             print("С панели Deliver даже в новой версии вместо ExportCurrentFrameAsStill будет вызван AddRenderJob")
         end
     end
@@ -109,27 +109,17 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 	local output=getDir(outputPath)
 	local preset=getBase(output)
 
-	local presets=Project:GetRenderPresetList()
-	local has=false
-	if next(presets) then
-		for _, v in ipairs(presets) do
-			if v==preset then
-				has=true
-				break
-			end
+	if Project:SaveAsNewRenderPreset(preset) then
+		print("Шаблон экспорта ~> "..preset)
+		print("Убедись что на странице `File` выбран режим `Filename uses`=`Custom name` и `Custom name`=`%Timeline Name`")
+	end
+	if type(resolve.ExportRenderPreset) == "function" then
+		local presetFile=output.."/"..preset..".xml"
+		if not bmd.fileexists(presetFile) and resolve:ExportRenderPreset(preset, output) then
+			print("Шаблон экспорта ~> "..presetFile)
 		end
 	end
 
-	if not has then
-		local ok=Project:SaveAsNewRenderPreset(preset)
-		print("Шаблон экспорта "..preset.. " сохранён "..ok)
-		print("Убедись что на странице `File` выбран режим `Filename uses`=`Custom name` и `Custom name`=`%Timeline Name`")
-	end
-	
-	local presetFile=output.."/"..preset
-	if type(Project.ExportRenderPreset)== "function" and not bmd:fileexists(presetFile) then
-		Project:ExportRenderPreset(preset, presetFile)
-	end
     if not Project:SetCurrentRenderFormatAndCodec(ext, CODEC) then
 		ext=FORMATb
         if not Project:SetCurrentRenderFormatAndCodec(ext, CODECb) then
@@ -325,7 +315,7 @@ local function main()
     local output, tlClips= rootTimeLines()
     assert(output ~= "","Пустой медиапул")
     assert(next(tlClips) ,"Нет таймлайнов")
-    bmd.createdir(output.."TL")
+    bmd.createdir(output..TL)
     
     -- Таблица для хранения клипов по таймлайнам и mediaId
     local tlm = {} -- структура: tlm[timelineName][mediaId] = mediaPoolItem
@@ -336,8 +326,8 @@ local function main()
     local ctlName = ctl:GetName()
 
     local all = false
-	local currentPage=resolve:GetCurrentPage()
-    if currentPage ~= "media" then
+	Page=resolve:GetCurrentPage()
+    if Page ~= "media" then
 		print("С панелей кроме Media только "..ctlName)
     else
 		print("С панели Media для всех таймлайнов")
@@ -421,7 +411,7 @@ local function main()
             end
 
             if next(marker_table) then
-				dump(marker_table)
+				-- dump(marker_table)
                 export_subtitles(marker_table, "srt", file, frame_rate)
             end
             
@@ -481,7 +471,9 @@ local function main()
         end
     end
     print(string.format("=== Экспортировано %d из %d ===", Exported,  tlc))
-	resolve:SetCurrentPage(currentPage)
+	if resolve:GetCurrentPage()~=Page then
+		resolve:OpenPage(Page)
+	end
 end
 
 function TrimFrame(file, ext)
