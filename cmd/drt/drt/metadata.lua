@@ -17,7 +17,8 @@ Project = assert(projectManager:GetCurrentProject(),"GetCurrentProject")
 MediaPool = assert(Project:GetMediaPool(),"GetMediaPool")
 RootFolder = assert(MediaPool:GetRootFolder(),"GetRootFolder")
 Clips =  assert(RootFolder:GetClipList(),"GetClipList")
-MediaStorage = assert(resolve:GetMediaStorage(),"GetMediaStorage")
+-- MediaStorage = assert(resolve:GetMediaStorage(),"GetMediaStorage")
+Windows = package.config:sub(1, 1) == "\\"
 Exported = 0
 
 local FORMAT = "png"
@@ -107,10 +108,26 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 	local output=getDir(outputPath)
 	local preset=getBase(output)
 
+	local presets=Project:GetRenderPresetList()
+	local has=false
+	if next(presets) then
+		for _, v in ipairs(presets) do
+			if v==preset then
+				has=true
+				break
+			end
+		end
+	end
 
-	Project:SaveAsNewRenderPreset(preset)
-	if type(Project.ExportRenderPreset)== "function" then
-		Project:ExportRenderPreset(preset,output.."/"..preset)
+	if not has then
+		local ok=Project:SaveAsNewRenderPreset(preset)
+		print("Шаблон экспорта "..preset.. " сохранён "..ok)
+		print("Убедись что на странице `File` выбран режим `Filename uses`=`Custom name` и `Custom name`=`%Timeline Name`")
+	end
+	
+	local presetFile=output.."/"..preset
+	if type(Project.ExportRenderPreset)== "function" and not bmd:fileexists(presetFile) then
+		Project:ExportRenderPreset(preset, presetFile)
 	end
     if not Project:SetCurrentRenderFormatAndCodec(ext, CODEC) then
 		ext=FORMATb
@@ -127,7 +144,7 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
         MarkIn = pos,
         MarkOut = pos,
         TargetDir =output,
-        CustomName = CustomName, -- Для этого установи Filename uses в Custom name а его в %timeline
+        CustomName = CustomName,
     }
 
     if not Project:SetRenderSettings(renderSettings) then
@@ -136,7 +153,7 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
     end
 
 
-
+	Project:SetCurrentRenderMode(1)
     local jobId = Project:AddRenderJob()
 
 	local ok=jobId ~= ""
@@ -171,25 +188,20 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 
 	Project:LoadRenderPreset(preset)
 
+
 	if ok then
-		print(outputPath.."*."..ext)
-		-- MediaStorage:RevealInStorage(output)
-		-- dump({GetFileList=MediaStorage:GetFileList("c:/tmp")})
-		-- local paths=MediaStorage:GetFiles(output.."/")
 		local paths=bmd.readdir(outputPath.."*."..ext)
 		if paths and next(paths) then
-			for i, v in ipairs(paths) do
-				--local path=paths.Parent..v.Name
-				local oldpath=paths.Parent..v.Name
-				local newname=TrimFrame(v.Name, ext)
-				local newpath=oldpath:gsub(v.Name, newname)
-				local base=getBase(file)
-				if newname==base then
-					dump({oldpath=oldpath,newpath=newpath,base=base})
-					-- dump(os.rename(oldpath, newpath))
-					dump(rename(oldpath, base))
-					-- dump(os.rename(oldpath, base))
-					-- dump(ffmpeg(oldpath, outputPath.."."..FORMAT))
+			for _, path in ipairs(paths) do
+				local newname=TrimFrame(path.Name, ext)
+				if newname==getBase(file) then
+					local oldpath=paths.Parent..path.Name
+					local newpath=oldpath:gsub(path.Name, newname)
+					-- dump({oldpath=oldpath,newpath=newpath})
+					if rename(oldpath, newpath) then
+						print(path.Name.." ~> "..newname)
+						break
+					end
 				end
 			end
 		end
@@ -198,18 +210,13 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 	return ok
 end
 
-local function createTempFile(prefix, suffix)
-    prefix = prefix or "temp_"
+local function createTempFile(suffix)
     suffix = suffix or ""
     
     -- Создаем уникальное имя файла
     local tempname = os.tmpname()
-    
-    -- Удаляем возможный префикс пути (в некоторых реализациях Lua)
-    tempname = tempname:match("[^\\/]+$") or tempname
-    
-    -- Формируем полное имя с учетом префикса и суффикса
-    local filename = prefix .. tempname .. suffix
+    -- Формируем полное имя
+    local filename = tempname .. suffix
     
     -- Создаем файл (возвращаем файловый объект и имя файла)
     local file, err = io.open(filename, "w+")
@@ -222,7 +229,6 @@ local function createTempFile(prefix, suffix)
         name = filename,
         close = function(self)
             if self.file then
-                self.file:close()
                 os.remove(self.name)
             end
         end
@@ -233,20 +239,18 @@ local function universalCall(func, ...)
     -- Проверка на не-ASCII символы
     local function hasNonAscii(text)
         if type(text) ~= "string" then return false end
-        -- Ищем любой байт с установленным 8-м битом (коды 128-255)
         return text:match("[\128-\255]") ~= nil
     end
 
-    local isWindows = package.config:sub(1, 1) == "\\"
     local args = {...}
     
-    -- Проверяем необходимость BAT-файла
-    local needsBat = isWindows and (
+    -- Проверяем необходимость временного файла
+    local needsTempFile = Windows and (
         func == os.rename and 
         (hasNonAscii(args[1]) or hasNonAscii(args[2]))
     )
 
-    if not needsBat then
+    if not needsTempFile then
         -- Прямой вызов для простых случаев
         if func == os.rename then
             return os.rename(...)
@@ -259,28 +263,36 @@ local function universalCall(func, ...)
         end
     end
 
-    -- Создание временного BAT-файла
-    local tempPath = os.getenv("TEMP") or "."
-    local batFile = io.open(tempPath.."\\temp_utf8.bat", "w")
-    if not batFile then return false, "Failed to create BAT file" end
+    -- Создание временного BAT-файла с использованием createTempFile
+    local temp, err = createTempFile(".bat")
+    if not temp then
+        return false, "Failed to create temp file: "..err
+    end
 
+    -- Записываем команды в BAT-файл
     if func == os.rename then
-        local newName = args[2]:match("[^\\/]+$") or args[2]
-        batFile:write(
+        local oldPath = args[1]
+        local newPath = args[2]
+        local newName = newPath:match("[^\\/]+$") or newPath
+        temp.file:write(
             "@chcp 65001 > nul\n"..
-            "@rename \""..args[1].."\" \""..newName.."\"\n"
+            "@del /q \""..newPath.."\"\n"..
+            "@rename \""..oldPath.."\" \""..newName.."\"\n"
         )
+        --    "@if exist \""..newPath.."\" del /q \""..newPath.."\" >nul 2>&1\n"..
     else
-        batFile:write(
+        temp.file:write(
             "@chcp 65001 > nul\n"..
             "@"..table.concat(args, " ").."\n"
         )
     end
-    batFile:close()
+    temp.file:close()
 
     -- Выполнение с обработкой результата
-    local success, _, status = os.execute('"'..tempPath..'\\temp_utf8.bat"')
-    os.remove(tempPath.."\\temp_utf8.bat")
+    local success, _, status = os.execute('"'..temp.name..'"')
+    
+    -- Автоматическое удаление временного файла через метод close
+    temp:close()
 
     if func == os.rename then
         return success
@@ -541,7 +553,7 @@ local function export_youtube_chapters(marker_table, filename)
     write_file(filename, table.concat(chapters, "\n"))
 end
 
-function export_subtitles(marker_table, format, filename,frame_rate)
+function export_subtitles(marker_table, format, filename, frame_rate)
     local subtitles = {}
 
     if format == "webvtt" then
