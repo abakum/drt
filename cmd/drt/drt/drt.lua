@@ -20,6 +20,7 @@ Clips =  assert(RootFolder:GetClipList(),"GetClipList")
 -- MediaStorage = assert(resolve:GetMediaStorage(),"GetMediaStorage")
 Windows = package.config:sub(1, 1) == "\\"
 Exported = 0
+Once = true
 
 local FORMAT = "png"
 local CODEC = "RGB8"
@@ -42,13 +43,17 @@ local function getBase(path)
     return path:match("([^/]+)$")
 end
 
+local function better8(s)
+    local num = tonumber(s)
+    return num and num > 8 or false
+end
+
 -- Функция для получения корневой папки и списка таймлайнов
 local function rootTimeLines()
     MediaPool:SetCurrentFolder(RootFolder)
     local dir = ""
     local timeLines = {}
-    -- local mInOut = {}
-    
+	local bit10=false
     for _, clip in ipairs(Clips) do
         local filePath = clip:GetClipProperty("File Path")
         if filePath == "" then
@@ -57,10 +62,15 @@ local function rootTimeLines()
         else
             -- В моих проектах все клипы в одном каталоге
             dir = getDir(filePath)
+			bit10=bit10 or better8(clip:GetClipProperty("Bit Depth"))
         end
     end
-    
-    return dir, timeLines --, mInOut
+	if bit10 then
+		print("Есть клипы с глубиной цвета больше 8 бит")
+		CODEC = "RGB16"
+		CODECb = "RGB16LZW"
+	end
+	return dir, timeLines
 end
 
 -- Функция для очистки имени файла
@@ -89,15 +99,20 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 	-- CustomName=CustomName,
     -- })
     local ext=FORMAT
+	local file=outputPath.."."..ext
+	local time=luaresolve:time_from_frame(pos, frame_rate).time
+	local tt=timecode.."="..time
+
     if type(Project.ExportCurrentFrameAsStill) == "function" then
-        local ctc=timeline:GetCurrentTimecode(timecode)
         timeline:SetCurrentTimecode(timecode)
-        local ok=Project:ExportCurrentFrameAsStill(outputPath.."."..ext)
-        timeline:SetCurrentTimecode(ctc)
+		-- print("SetCurrentTimecode("..timecode)
+        local ok=Project:ExportCurrentFrameAsStill(file)
         if ok then
+			print(tt.." ~> "..file)
             return true
         end
-        if Page == "deliver" then
+        if Page == "deliver" and Once then
+			Once=false
             print("С панели Deliver даже в новой версии вместо ExportCurrentFrameAsStill будет вызван AddRenderJob")
         end
     end
@@ -111,7 +126,7 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 
 	if Project:SaveAsNewRenderPreset(preset) then
 		print("Шаблон экспорта ~> "..preset)
-		print("Убедись что на странице `File` выбран режим `Filename uses`=`Custom name` и `Custom name`=`%Timeline Name`")
+		print("Убедись что на панели `File` выбран режим `Filename uses`=`Custom name` и `Custom name`=`%Timeline Name`")
 	end
 	if type(resolve.ExportRenderPreset) == "function" then
 		local presetFile=output.."/"..preset..".xml"
@@ -122,14 +137,13 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 
     if not Project:SetCurrentRenderFormatAndCodec(ext, CODEC) then
 		ext=FORMATb
+		file=outputPath.."."..ext
         if not Project:SetCurrentRenderFormatAndCodec(ext, CODECb) then
             print(string.format("Не удалось установить формат %s и кодек %s", FORMATb, CODECb))
 			-- Вспомним
             return false
         end
     end
-
-	local file=outputPath.."."..ext
 
 	local renderSettings = {
         MarkIn = pos,
@@ -143,8 +157,7 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
         return false
     end
 
-
-	Project:SetCurrentRenderMode(1)
+	Project:SetCurrentRenderMode(1) --Single Clip
     local jobId = Project:AddRenderJob()
 
 	local ok=jobId ~= ""
@@ -185,11 +198,12 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 		if paths and next(paths) then
 			for _, path in ipairs(paths) do
 				local newname=TrimFrame(path.Name, ext)
-				if newname==getBase(file) then
+				local base=getBase(file)
+				if path.Name~=base and newname==base then
 					local oldpath=paths.Parent..path.Name
+					print(tt.." ~> "..oldpath)
 					local newpath=oldpath:gsub(path.Name, newname)
-					-- dump({oldpath=oldpath,newpath=newpath})
-					if rename(oldpath, newpath) then
+					if Rename(oldpath, newpath) then
 						print(path.Name.." ~> "..newname)
 						break
 					end
@@ -242,80 +256,66 @@ function Quote(s)
     return s
 end
 
-local function renameExecute(func, ...)
-    local args = {}
-	local needsTempFile = false
-	for _,arg in ipairs({...}) do
-		needsTempFile=needsTempFile or HasNonAscii(arg)
-		args[#args+1]=Quote(arg)
-	end
-    needsTempFile=needsTempFile and Windows
-
-    if not needsTempFile then
-        -- Прямой вызов для простых случаев
-        if func == os.rename then
-            return os.rename(...)
-        else
-            local success, exit_type, exit_code = os.execute(...)
-            if not success then
-                return false, exit_type.." "..tostring(exit_code)
-            end
-            return true
-        end
+local function utf8_to_wide(utf8_str)
+    local len = ffi.C.MultiByteToWideChar(65001, 0, utf8_str, -1, nil, 0)
+    if len == 0 then
+        return nil, "Ошибка получения длины: " .. ffi.C.GetLastError()
     end
-
-    -- Создание временного BAT-файла с использованием createTempFile
-    local temp, err = createTempFile(".bat")
-    if not temp then
-        return false, "Failed to create temp file: "..err
+    local buf = ffi.new("wchar_t[?]", len)
+    if ffi.C.MultiByteToWideChar(65001, 0, utf8_str, -1, buf, len) == 0 then
+        return nil, "Ошибка преобразования: " .. ffi.C.GetLastError()
     end
+    return buf
+end
 
-    -- Записываем команды в BAT-файл
-	local command="@chcp 65001\n"
-    if func == os.rename then
-		command=command.."move /y "
-    end
-	command=command..table.concat(args, " ").."\n"
-	print(command)
-	temp.file:write(command)
-    temp.file:close()
-
-    -- Выполнение с обработкой результата
-    local success, exit_type, exit_code = os.execute(Quote(temp.name))
+function Rename(oldName, newName)
+    local winapi = Windows and (HasNonAscii(oldName) or HasNonAscii(newName))
     
-    -- Автоматическое удаление временного файла через метод close
-    temp:close()
-
-    if func == os.rename then
-        return success
-    else
-        if success then
-            return true
-        else
-            return false, exit_type.." "..tostring(exit_code)
-        end
+    if not winapi then
+        return os.rename(oldName, newName)
     end
+    
+    local wideOld, err = utf8_to_wide(oldName)
+    if not wideOld then
+        return nil, err
+    end
+    
+    local wideNew, err = utf8_to_wide(newName)
+    if not wideNew then
+        return nil, err
+    end
+    
+    if ffi.C.MoveFileW(wideOld, wideNew) == 0 then
+        return nil, "Ошибка перемещения файла: " .. ffi.C.GetLastError()
+    end
+    
+    return true
 end
-
--- Обертки с четкой сигнатурой возврата
-function rename(oldName, newName)
-    return renameExecute(os.rename, oldName, newName)  -- всегда возвращает bool
-end
-
-function ffmpeg(oldpath, newpath)
-    return renameExecute(os.execute, "ffmpeg", "-i", oldpath, newpath)
-end
-
 
 -- Основная функция
 local function main()
-    print("=== Экспорт метаданных ===")
-
+    print("=== Экспорт и резервирование ===")
     -- Получаем корневую папку и таймлайны как mediaPoolItem
     local output, tlClips= rootTimeLines()
     assert(output ~= "","Пустой медиапул")
     assert(next(tlClips) ,"Нет таймлайнов")
     bmd.createdir(output..TL)
+
+    print("Экспорт метаданных в .csv")
+    print("Экспорт кадров помеченных маркером с длительностью 00:00:00:01 в .png или .tif")
+    print("Экспорт маркеров с длительностью больше 00:00:00:01 в .srt или с панели Cut в .vtt")
+    print("Резервирования таймлана в .drt")
+    print("Резервирования шаблонов экспорта с панели Deliver")
+
+	if Windows then
+		ffi.cdef[[
+			int MultiByteToWideChar(unsigned int CodePage, unsigned long dwFlags,
+								const char* lpMultiByteStr, int cbMultiByte,
+								wchar_t* lpWideCharStr, int cchWideChar);
+			int MoveFileW(const wchar_t* lpExistingFileName, const wchar_t* lpNewFileName);
+			unsigned long GetLastError();
+		]]
+	end
     
     -- Таблица для хранения клипов по таймлайнам и mediaId
     local tlm = {} -- структура: tlm[timelineName][mediaId] = mediaPoolItem
@@ -328,7 +328,7 @@ local function main()
     local all = false
 	Page=resolve:GetCurrentPage()
     if Page ~= "media" then
-		print("С панелей кроме Media только "..ctlName)
+		print("С панелей кроме Media только для одного таймлайна ~> "..ctlName)
     else
 		print("С панели Media для всех таймлайнов")
         all=true
@@ -340,6 +340,7 @@ local function main()
         local timeline = Project:GetTimelineByIndex(i)
         local tln = timeline:GetName()
         if all or ctlName==tln then
+			local ctc=timeline:GetCurrentTimecode()
 
             local frame_rate = luaresolve.frame_rates:get_decimal(timeline:GetSetting("timelineFrameRate"))
             local drop_frame = timeline:GetSetting("timelineDropFrameTimecode") == "1"
@@ -347,9 +348,15 @@ local function main()
             local file = output .. TL .. name .. ".drt"
             if not all then
                 -- Экспортируем в .drt
-                timeline:Export(file, resolve.EXPORT_DRT, resolve.EXPORT_NONE)
+                if timeline:Export(file, resolve.EXPORT_DRT, resolve.EXPORT_NONE) then
+					print("Таймлайн ~> "..file)
+				end
             end
-            file = output .. TL .. name .. ".srt"
+			local st="srt"
+			if Page=="cut" then
+	            st="vtt"
+			end
+            file = output .. TL .. name .. "."..st
 
             local markers = timeline:GetMarkers()
             local marker_frames = {}
@@ -366,7 +373,8 @@ local function main()
             local count = 0
             local color="Blue"
 			local timeline_start = timeline:GetStartFrame()
-			local In=tlClips[tln]:GetClipProperty("In")
+			local tlClip=tlClips[tln]
+			local In=tlClip:GetClipProperty("In")
 			local Inf=luaresolve:frame_from_timecode(In, frame_rate)
 
             for _, frame in ipairs(marker_frames) do
@@ -377,18 +385,18 @@ local function main()
                 if all or color == marker.color then
                     count = count + 1
                     
-                    if marker.note == "" or marker.duration==1 then
-                        -- Без описания или короткое значит картинка
+                    if marker.duration==1 then
+                        -- Ели короткое значит картинка
                         local fullPath = output .. "/" .. name
                         if marker.name ~= "Marker 1" then
                             fullPath = output .. "/" .. name .. " " .. sanitizeFilename(marker.name)
                         end
                        Project:SetCurrentTimeline(timeline)
                        exportFrameAsStill(sourceF,
-					    fullPath, 
+					    fullPath,
 						timeline,
 						luaresolve:timecode_from_frame(sourceF, frame_rate, drop_frame),
-						tlClips[tln],
+						tlClip,
 						frame_rate)
                     else
 						local data =
@@ -410,9 +418,15 @@ local function main()
                 end
             end
 
+			if timeline:GetCurrentTimecode()~=ctc then
+	        	timeline:SetCurrentTimecode(ctc)
+				-- print("SetCurrentTimecode("..ctc)
+			end
+
             if next(marker_table) then
 				-- dump(marker_table)
-                export_subtitles(marker_table, "srt", file, frame_rate)
+				print("Субтитры из маркеров ~> "..file)
+                export_subtitles(marker_table, st, file, frame_rate)
             end
             
             -- Инициализируем таблицу для этого таймлайна
@@ -490,7 +504,7 @@ local function write_file(filename, content)
 			assert(file_handle:write(content))
 			assert(file_handle:close())
 
-			rename(temp.name, filename)
+			Rename(temp.name, filename)
 			temp:close()
 			return
 		end
@@ -561,7 +575,7 @@ end
 function export_subtitles(marker_table, format, filename, frame_rate)
     local subtitles = {}
 
-    if format == "webvtt" then
+    if format == "vtt" then
         subtitles[#subtitles+1] = "WEBVTT\n"
     end
 
@@ -573,8 +587,11 @@ function export_subtitles(marker_table, format, filename, frame_rate)
             start_time = start_time:gsub("%.", ",")
             end_time = end_time:gsub("%.", ",")
         end
-
-        subtitles[#subtitles+1] = string.format("%s\n%s --> %s\n%s\n", index, start_time, end_time, marker_data.note)
+		local text=marker_data.name
+		if marker_data.note~="" then
+			text=marker_data.note
+		end
+        subtitles[#subtitles+1] = string.format("%s\n%s --> %s\n%s\n", index, start_time, end_time, text)
     end
 
     write_file(filename, table.concat(subtitles, "\n"))

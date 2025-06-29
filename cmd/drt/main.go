@@ -140,7 +140,11 @@ func main() {
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()
 	closer.Bind(cncl)
-
+	closer.Bind(func() {
+		if runtime.GOOS == "darwin" && trimExt(filepath.Base(exe)) != drt {
+			exec.Command("osascript", "-e", `tell application "Terminal" to close first window`).Start()
+		}
+	})
 	// ctx, cncl = signal.NotifyContext(context.Background(), closer.DefaultSignalSet...)
 	// defer cncl()
 
@@ -368,7 +372,7 @@ func main() {
 							dir := filepath.Dir(file)
 							switch e := Ext(file); e {
 							case ".dpx", ".cin", ".tif", ".ppm", ".bmp", ".xpm":
-								jpg := fixDRd8(base, e)
+								jpg := trimFrame(base, e)
 								exported := base != jpg
 								jpg = trimExt(jpg) + dotJPG
 								args := []string{
@@ -390,7 +394,7 @@ func main() {
 								}
 							case ".jpg", ".png", dotFLAC:
 								fileXXXXXXXX := file
-								file = fixDRd8(file, e)
+								file = trimFrame(file, e)
 								if file != fileXXXXXXXX {
 									err := os.Rename(fileXXXXXXXX, file)
 									log.Println(base, "~>", filepath.Base(file), err)
@@ -487,7 +491,7 @@ func main() {
 						".png", dotJPG: // Любая картинка для переименования с d8
 						isEmpty <- file
 					case dotFLAC:
-						file = fixDRd8(file, dotFLAC)
+						file = trimFrame(file, dotFLAC)
 						fallthrough
 					default:
 						// Остальные если это результаты
@@ -1044,7 +1048,7 @@ func printHT(parent string) {
 
 // DR вместо bar.flac пишет bar00047491.flac.
 // DR вместо foo1.flac пишет foo1_00047491.flac.
-func fixDRd8(file, ext string) string {
+func trimFrame(file, ext string) string {
 	re := regexp.MustCompile(fmt.Sprintf(`(_?\d{8})(\%s)`, ext))
 	return re.ReplaceAllString(file, "${2}")
 }
@@ -1063,7 +1067,7 @@ func TestFixDRd8() {
 	}
 
 	for _, tt := range tests {
-		got := fixDRd8(tt.input, dotFLAC)
+		got := trimFrame(tt.input, dotFLAC)
 		if got != tt.want {
 			log.Printf("fixDRd8(%q) = %q, want %q", tt.input, got, tt.want)
 		}
