@@ -71,6 +71,7 @@ var (
 	cncl     context.CancelFunc
 	argsTags bool // Тэги в командной строке
 	win      = runtime.GOOS == "windows"
+	darwin   = runtime.GOOS == "darwin"
 	// a/b.c
 	args0 = trimExt(filepath.Base(os.Args[0]))
 	// b.c
@@ -141,7 +142,7 @@ func main() {
 	defer closer.Close()
 	closer.Bind(cncl)
 	closer.Bind(func() {
-		if runtime.GOOS == "darwin" && trimExt(filepath.Base(exe)) != drt {
+		if darwin && trimExt(filepath.Base(exe)) != drt {
 			exec.Command("osascript", "-e", `tell application "Terminal" to close first window`).Start()
 		}
 	})
@@ -564,7 +565,7 @@ func main() {
 			if s == "" {
 				break
 			}
-			if !strings.Contains(s, `"`) && !strings.Contains(s, `'`) {
+			if !strings.Contains(s, `"`) && !strings.Contains(s, `'`) && !darwin {
 				// tags
 				etc = append(etc, s)
 				continue
@@ -585,6 +586,10 @@ func main() {
 				if err == nil {
 					f.Close()
 				} else if err.Error() != "isDir" {
+					if darwin {
+						etc = append(etc, s)
+						continue
+					}
 					log.Println("медиафайл?", file)
 					fmt.Println(prompt)
 					continue scan
@@ -981,7 +986,7 @@ func Values[Map ~map[K]V, K comparable, V any](m Map) (values []V) {
 
 func ln(oldname, newname string, link, hard bool) (err error) {
 	if link {
-		opt := "/s"
+		opt := "-s"
 		osLink := os.Symlink
 		m := "symbolic"
 		if hard {

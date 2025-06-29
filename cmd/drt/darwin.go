@@ -80,19 +80,12 @@ func install(oldname string, lnks ...string) {
 	})
 	main := filepath.Join(adr, "Contents")
 	files := []string{filepath.Join(main, "MacOS", "droplet")}
-	main = filepath.Join(main, "Resources", "Scripts", "main")
-	files = append(files, main, main+".scpt")
-	// log.Println(main, "~> /dev/null", os.Remove(main))
-	// ln(oldname, main, true, false)
+	main = filepath.Join(main, "Resources", "Scripts", "main.scpt")
+	files = append(files, main)
 	for _, f := range files {
 		log.Println("chmod +x", f, os.Chmod(f, 0755))
 	}
 
-	// open -b com.apple.ScriptEditor2 adr
-	// ## Set use_terminal to true to run the script in a terminal
-	// set use_terminal to true
-	// ## Set exit_terminal to false to leave the terminal session open after script runs
-	// set exit_terminal to true
 	// https://github.com/abbeycode/AppleScripts/blob/master/Services/Convert%20Script%20to%20Text.applescript
 	if _, err := exec.LookPath(drTags); err == nil {
 		return
