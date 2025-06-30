@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"embed"
-	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -13,8 +12,11 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/adrg/xdg"
 	"github.com/google/shlex"
 )
+
+var DRS = filepath.Join(xdg.DataHome, "Blackmagic Design", "DaVinci Resolve")
 
 //go:embed drTags.app
 var app embed.FS
@@ -48,7 +50,7 @@ func install(oldname string, lnks ...string) {
 			if _, err := os.Stat(destPath); os.IsNotExist(err) {
 				err = os.MkdirAll(destPath, 0755)
 				if err != nil {
-					fmt.Println("Error creating directory:", err)
+					log.Println("Error creating directory:", err)
 					return err
 				}
 			}
@@ -58,24 +60,24 @@ func install(oldname string, lnks ...string) {
 		// Copy file.
 		srcFile, err := app.Open(path)
 		if err != nil {
-			fmt.Println("Error opening embedded file:", err)
+			log.Println("Error opening embedded file:", err)
 			return err
 		}
 		defer srcFile.Close()
 
 		destFile, err := os.Create(destPath)
 		if err != nil {
-			fmt.Println("Error creating destination file:", err)
+			log.Println("Error creating destination file:", err)
 			return err
 		}
 		defer destFile.Close()
 
 		_, err = io.Copy(destFile, srcFile)
 		if err != nil {
-			fmt.Println("Error copying file:", err)
+			log.Println("Error copying file:", err)
 			return err
 		}
-		fmt.Println(path, "~>", destPath)
+		log.Println(path, "~>", destPath)
 		return nil
 	})
 	main := filepath.Join(adr, "Contents")

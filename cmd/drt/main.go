@@ -60,6 +60,7 @@ const (
 	dotFLAC = ".flac"
 	dotMP3  = ".mp3"
 	dotJPG  = ".jpg"
+	dotLUA  = ".lua"
 	prompt  = `Пустая строка подтверждает ввод, ^С прерывает ввод.
 Введи "имя файла" или drag-n-drop или тэг=значение`
 )
@@ -107,6 +108,7 @@ var (
 		}
 		return v.(string), o
 	}
+	drs = filepath.Join(DRS, "Fusion", "Scripts", "Utility", drt+dotLUA)
 )
 
 var _ = version.Ver
@@ -115,6 +117,9 @@ var _ = version.Ver
 
 //go:embed VERSION
 var VERSION string
+
+//go:embed drt/drt.lua
+var lua []byte
 
 func main() {
 	var (
@@ -820,6 +825,11 @@ func help() {
 	}
 	defer ctrlC()
 
+	if oldname == "" {
+		log.Println(drs, "~> nul", os.Remove(drs))
+	} else {
+		log.Println(drt+dotLUA, "~>", drs, copy(lua, drs))
+	}
 	desktop := filepath.Join(xdg.UserDirs.Desktop, dr)
 	link := filepath.Join(dir, drTags)
 
@@ -1077,4 +1087,27 @@ func TestFixDRd8() {
 			log.Printf("fixDRd8(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
+}
+
+func copy(srcFile []byte, destPath string) error {
+	// if _, err := os.Stat(destPath); os.IsNotExist(err) {
+	// 	err = os.MkdirAll(destPath, 0755)
+	// 	if err != nil {
+	// 		log.Println("Error creating directory:", err)
+	// 		return err
+	// 	}
+	// }
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		log.Println("Error creating destination file:", err)
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = destFile.Write(srcFile)
+	if err != nil {
+		log.Println("Error write file:", err)
+		return err
+	}
+	return nil
 }

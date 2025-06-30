@@ -8,10 +8,12 @@ import (
 	"mime"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/adrg/xdg"
 	"github.com/jxeng/shortcut"
 	"golang.org/x/sys/windows"
 	"golang.org/x/text/encoding/unicode"
@@ -26,6 +28,7 @@ var (
 		dotFLAC: "audio/x-flac",
 		dotMP3:  "audio/mpeg",
 	}
+	DRS = filepath.Join(xdg.DataDirs[0], "Blackmagic Design", "DaVinci Resolve", "Support")
 )
 
 func amAdmin() bool {

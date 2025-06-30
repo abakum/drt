@@ -168,7 +168,7 @@ local function exportFrameAsStill(pos, outputPath, timeline, timecode, tlClip, f
 			for i=1, 10 do
 				bmd.wait(1) --Stop the Script to a set amount of seconds
 				if not Project:IsRenderingInProgress() then
-					ok=true
+					ok=Project:GetRenderJobStatus(jobId).JobStatus=="Complete"
 					break
 				end
 			end

@@ -7,8 +7,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
+	"github.com/adrg/xdg"
 	"github.com/google/shlex"
 )
 
@@ -20,6 +22,7 @@ var (
 		dotFLAC: "audio/flac",
 		dotMP3:  "audio/mpeg",
 	}
+	DRS = filepath.Join(xdg.DataHome, "DaVinciResolve")
 )
 
 func install(oldname string, lnks ...string) {
