@@ -1,3 +1,4 @@
+#cd /Applications/drTags.app/Contents/Resources/Scripts/
 #osadecompile main.scpt > main.applescript
 #osacompile -l AppleScript -d main.scpt > main.applescript
 #osacompile -o main.scpt main.applescript

@@ -5,18 +5,30 @@ package main
 import (
 	"bytes"
 	"embed"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/adrg/xdg"
 	"github.com/google/shlex"
 )
 
-var DRS = filepath.Join(xdg.DataHome, "Blackmagic Design", "DaVinci Resolve")
+// var DRS = filepath.Join(xdg.DataHome, "Blackmagic Design", "DaVinci Resolve")
+var DRS = filepath.Join(xdg.DataHome,
+	"..",
+	"Containers",
+	"com.blackmagic-design.DaVinciResolveLite",
+	"Data",
+	"Library",
+	"Application Support",
+)
+
+// Containers/com.blackmagic-design.DaVinciResolveLite/Data/Library/Application Support/Fusion/Scripts
 
 //go:embed drTags.app
 var app embed.FS
@@ -82,23 +94,29 @@ func install(oldname string, lnks ...string) {
 	})
 	main := filepath.Join(adr, "Contents")
 	files := []string{filepath.Join(main, "MacOS", "droplet")}
-	main = filepath.Join(main, "Resources", "Scripts", "main.scpt")
-	files = append(files, main)
 	for _, f := range files {
 		log.Println("chmod +x", f, os.Chmod(f, 0755))
 	}
+	main = filepath.Join(main, "Resources", "Scripts")
 
 	// https://github.com/abbeycode/AppleScripts/blob/master/Services/Convert%20Script%20to%20Text.applescript
 	if _, err := exec.LookPath(drTags); err == nil {
 		return
 	}
-	data, err := os.ReadFile(main)
-	log.Println("Читаю скрипт", main, err)
+	scpt := filepath.Join(main, "main.scpt")
+	applescript := filepath.Join(main, "main.applescript")
+	data, err := os.ReadFile(applescript)
+	log.Println("<~", applescript, err)
 	if err != nil {
 		return
 	}
-	data = bytes.Replace(data, []byte(drTags), []byte(link), 1)
-	log.Println("Пишу скрипт", main, os.WriteFile(main, data, 0755))
+	data = bytes.Replace(data, []byte(`"`+drTags+`"`), []byte(`"`+link+`"`), 1)
+	err = os.WriteFile(applescript, data, 0644)
+	log.Println("~>", applescript, err)
+	if err != nil {
+		return
+	}
+	log.Println(applescript, "~>", scpt, OSACompile(applescript, scpt))
 }
 
 func evtp() {
@@ -106,4 +124,47 @@ func evtp() {
 
 func SplitCommandLine(command string) ([]string, error) {
 	return shlex.Split(command)
+}
+
+func OSACompile(src, trg string) error {
+	// Проверяем существование исходного файла
+	if _, err := os.Stat(src); os.IsNotExist(err) {
+		return fmt.Errorf("исходный файл не существует: %s", src)
+	}
+
+	// Определяем язык по расширению
+	ext := strings.ToLower(filepath.Ext(src))
+	var lang string
+
+	switch ext {
+	case ".applescript":
+		lang = "AppleScript"
+	case ".js":
+		lang = "JavaScript"
+	default:
+		return fmt.Errorf("неподдерживаемый формат скрипта: %s", ext)
+	}
+
+	// Проверяем соответствие расширений
+	targetExt := filepath.Ext(trg)
+	if (lang == "AppleScript" && targetExt != ".scpt") ||
+		(lang == "JavaScript" && targetExt != ".jsc") {
+		return fmt.Errorf("несоответствие расширений: исходный %s -> целевой %s", ext, targetExt)
+	}
+
+	// Создаем директорию для целевого файла, если нужно
+	if err := os.MkdirAll(filepath.Dir(trg), 0755); err != nil {
+		return fmt.Errorf("не удалось создать директорию: %v", err)
+	}
+
+	// Вызываем osacompile
+	cmd := exec.Command("osacompile", "-l", lang, "-o", trg, src)
+
+	// Захватываем вывод ошибок
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("ошибка компиляции: %v\n%s", err, string(output))
+	}
+
+	return nil
 }

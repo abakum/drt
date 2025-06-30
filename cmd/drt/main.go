@@ -109,6 +109,7 @@ var (
 		return v.(string), o
 	}
 	drs = filepath.Join(DRS, "Fusion", "Scripts", "Utility", drt+dotLUA)
+	gui = trimExt(filepath.Base(strings.ToLower(os.Args[0]))) != drt
 )
 
 var _ = version.Ver
@@ -141,13 +142,13 @@ func main() {
 		}
 	}
 	wd, _ := os.Getwd()
-	log.Println(exe, VERSION, wd)
+	log.Println(exe, VERSION, wd, gui)
 
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()
 	closer.Bind(cncl)
 	closer.Bind(func() {
-		if darwin && trimExt(filepath.Base(exe)) != drt {
+		if darwin && gui {
 			exec.Command("osascript", "-e", `tell application "Terminal" to close first window`).Start()
 		}
 	})
@@ -887,7 +888,6 @@ func yes(s string) (ok bool) {
 }
 
 func ctrlC() {
-	gui := trimExt(filepath.Base(exe)) != drt
 	if win {
 		gui = !strings.HasPrefix(os.Environ()[0], "=")
 	}
