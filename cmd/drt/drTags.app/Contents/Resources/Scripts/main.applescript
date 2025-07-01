@@ -4,21 +4,8 @@
 -- osacompile -o main.scpt main.applescript
 
 --https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/ProcessDroppedFilesandFolders.html#//apple_ref/doc/uid/TP40016239-CH53-SW1
-property theExtensionsToProcess : {
-    "csv",
-    "mov",
-    "mp4",
-    "flac",
-    "mp3",
-}
-property theTypeIdentifiersToProcess : {
-    "public.comma-separated-values-text",
-    "com.apple.quicktime-movie",
-    "public.mpeg-4",
-    "org.xiph.flac",
-    "public.mp3",
-    "public.folder",
-}
+property theExtensionsToProcess : {"csv", "mov", "mp4", "flac", "mp3"}
+property theTypeIdentifiersToProcess : {"public.comma-separated-values-text", "com.apple.quicktime-movie", "public.mpeg-4", "org.xiph.flac", "public.mp3", "public.folder"}
 
 on run
  process({})
