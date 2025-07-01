@@ -50,6 +50,7 @@ import (
 const (
 	drt     = "drt"    // для консоли
 	drTags  = "drTags" // для GUI
+	repo    = "com.github.abakum." + drt
 	dotCSV  = ".csv"
 	dotMOV  = ".mov"
 	dotMXF  = ".mxf"
@@ -148,7 +149,26 @@ func main() {
 	closer.Bind(cncl)
 	closer.Bind(func() {
 		if darwin && gui {
-			exec.Command("osascript", "-e", `tell application "Terminal" to close first window`).Start()
+			title := `
+tell application "Terminal"
+	repeat with win in windows
+		repeat with t in tabs of win
+			if custom title of t is "` + repo + `" then
+				if frontmost of win then
+					close win
+				end
+				delay 1
+				if (count of windows) = 0 then
+					quit
+				end if
+				exit repeat
+			end if
+		end repeat
+	end repeat
+end tell
+`
+			// exec.Command("osascript", "-e", `tell application "Terminal" to close first window`).Start()
+			exec.Command("osascript", "-e", title).Start()
 		}
 	})
 	// ctx, cncl = signal.NotifyContext(context.Background(), closer.DefaultSignalSet...)
