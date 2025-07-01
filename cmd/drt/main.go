@@ -108,7 +108,6 @@ var (
 		}
 		return v.(string), o
 	}
-	drs = filepath.Join(DRS, "Fusion", "Scripts", "Utility", drt+dotLUA)
 	gui = trimExt(filepath.Base(strings.ToLower(os.Args[0]))) != drt
 )
 
@@ -827,9 +826,9 @@ func help() {
 	defer ctrlC()
 
 	if oldname == "" {
-		log.Println(drs, "~> nul", os.Remove(drs))
+		copy(nil, drt+dotLUA, DRS...)
 	} else {
-		log.Println(drt+dotLUA, "~>", drs, copy(lua, drs))
+		copy(lua, drt+dotLUA, DRS...)
 	}
 	desktop := filepath.Join(xdg.UserDirs.Desktop, dr)
 	link := filepath.Join(dir, drTags)
@@ -1068,46 +1067,31 @@ func trimFrame(file, ext string) string {
 	return re.ReplaceAllString(file, "${2}")
 }
 
-func TestFixDRd8() {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"bar00047491.flac", "bar.flac"},
-		{"foo1_00047491.flac", "foo1.flac"},
-		{"1bar00047491.flac", "1bar.flac"},
-		{"1foo1_00047491.flac", "1foo1.flac"},
-		{"20250618 Экзамен 01 Чайковский Шесть пьес на одну тему для фортепиано части 1 2_00001137.flac", "20250618 Экзамен 01 Чайковский Шесть пьес на одну тему для фортепиано части 1 2.flac"},
-		{"20250618 Экзамен 03 Шостакович Двадцать четыре прелюдии и фуги часть 14 ми-бемоль минор00047491.flac", "20250618 Экзамен 03 Шостакович Двадцать четыре прелюдии и фуги часть 14 ми-бемоль минор.flac"},
-	}
-
-	for _, tt := range tests {
-		got := trimFrame(tt.input, dotFLAC)
-		if got != tt.want {
-			log.Printf("fixDRd8(%q) = %q, want %q", tt.input, got, tt.want)
+func copy(srcFile []byte, base string, DRS ...string) (err error) {
+	for _, dir := range DRS {
+		dir := filepath.Join(dir, "Fusion", "Scripts", "Utility")
+		if _, err = os.Stat(dir); os.IsNotExist(err) {
+			continue
 		}
-	}
-}
+		destPath := filepath.Join(dir, base)
+		if srcFile == nil {
+			err = os.Remove(destPath)
+			log.Println(destPath, "~> nul", err)
+			return
+		}
+		defer func() { log.Println(base, "~>", destPath, err) }()
 
-func copy(srcFile []byte, destPath string) error {
-	// if _, err := os.Stat(destPath); os.IsNotExist(err) {
-	// 	err = os.MkdirAll(destPath, 0755)
-	// 	if err != nil {
-	// 		log.Println("Error creating directory:", err)
-	// 		return err
-	// 	}
-	// }
-	destFile, err := os.Create(destPath)
-	if err != nil {
-		log.Println("Error creating destination file:", err)
-		return err
-	}
-	defer destFile.Close()
+		var destFile *os.File
+		destFile, err = os.Create(destPath)
+		if err != nil {
+			return
+		}
+		defer destFile.Close()
 
-	_, err = destFile.Write(srcFile)
-	if err != nil {
-		log.Println("Error write file:", err)
-		return err
+		_, err = destFile.Write(srcFile)
+		return
 	}
-	return nil
+	err = fmt.Errorf("Не установлен DaVinci Resolve")
+	log.Println(base, "~>", DRS, err)
+	return
 }

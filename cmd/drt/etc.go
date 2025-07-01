@@ -22,7 +22,11 @@ var (
 		dotFLAC: "audio/flac",
 		dotMP3:  "audio/mpeg",
 	}
-	DRS = filepath.Join(xdg.DataHome, "DaVinciResolve")
+	DRS = []string{
+		filepath.Join(xdg.DataHome, "DaVinciResolve"),
+		filepath.Join("/opt", "resolve"),
+		filepath.Join("/home", "resolve"),
+	}
 )
 
 func install(oldname string, lnks ...string) {

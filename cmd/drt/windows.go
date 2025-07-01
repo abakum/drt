@@ -28,7 +28,10 @@ var (
 		dotFLAC: "audio/x-flac",
 		dotMP3:  "audio/mpeg",
 	}
-	DRS = filepath.Join(xdg.DataDirs[0], "Blackmagic Design", "DaVinci Resolve", "Support")
+	DRS = []string{
+		filepath.Join(xdg.DataDirs[0], "Blackmagic Design", "DaVinci Resolve", "Support"),
+		filepath.Join(xdg.DataDirs[1], "Blackmagic Design", "DaVinci Resolve"),
+	}
 )
 
 func amAdmin() bool {

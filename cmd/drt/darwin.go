@@ -18,15 +18,18 @@ import (
 	"github.com/google/shlex"
 )
 
-// var DRS = filepath.Join(xdg.DataHome, "Blackmagic Design", "DaVinci Resolve")
-var DRS = filepath.Join(xdg.DataHome,
-	"..",
-	"Containers",
-	"com.blackmagic-design.DaVinciResolveLite",
-	"Data",
-	"Library",
-	"Application Support",
-)
+var DRS = []string{
+	filepath.Join(xdg.DataHome,
+		"..",
+		"Containers",
+		"com.blackmagic-design.DaVinciResolveLite",
+		"Data",
+		"Library",
+		"Application Support",
+	),
+	filepath.Join(xdg.DataHome, "Blackmagic Design", "DaVinci Resolve"),
+	filepath.Join(xdg.DataDirs[0], "Blackmagic Design", "DaVinci Resolve"),
+}
 
 // Containers/com.blackmagic-design.DaVinciResolveLite/Data/Library/Application Support/Fusion/Scripts
 
