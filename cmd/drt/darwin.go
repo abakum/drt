@@ -18,18 +18,27 @@ import (
 	"github.com/google/shlex"
 )
 
-var DRS = []string{
-	filepath.Join(xdg.DataHome,
-		"..",
-		"Containers",
-		"com.blackmagic-design.DaVinciResolveLite",
-		"Data",
-		"Library",
-		"Application Support",
-	),
-	filepath.Join(xdg.DataHome, "Blackmagic Design", "DaVinci Resolve"),
-	filepath.Join(xdg.DataDirs[0], "Blackmagic Design", "DaVinci Resolve"),
-}
+var (
+	met = map[string]string{
+		dotCSV:  "public.comma-separated-values-text",
+		dotMOV:  "com.apple.quicktime-movie",
+		dotMP4:  "public.mpeg-4",
+		dotFLAC: "org.xiph.flac",
+		dotMP3:  "public.mp3",
+	}
+	DRS = []string{
+		filepath.Join(xdg.DataHome,
+			"..",
+			"Containers",
+			"com.blackmagic-design.DaVinciResolveLite",
+			"Data",
+			"Library",
+			"Application Support",
+		),
+		filepath.Join(xdg.DataHome, "Blackmagic Design", "DaVinci Resolve"),
+		filepath.Join(xdg.DataDirs[0], "Blackmagic Design", "DaVinci Resolve"),
+	}
+)
 
 // Containers/com.blackmagic-design.DaVinciResolveLite/Data/Library/Application Support/Fusion/Scripts
 
