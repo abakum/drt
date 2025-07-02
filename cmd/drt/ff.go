@@ -41,22 +41,24 @@ func run(ctx context.Context, writer io.Writer, bin, root string, args ...string
 			log.Output(3, strings.Join(qArgs, " "))
 		}
 	}
-	if path, err := exec.LookPath(bin); err == nil {
-		// log.Println(path, err, "path, err")
-		if exe, err := os.Executable(); err == nil {
-			// log.Println(exe, err, "exe, err")
-			if resolved, err := filepath.EvalSymlinks(path); err == nil && resolved != exe {
-				qArgs[0] = path
-				out(false)
+	if lp, err := exec.LookPath(bin); err == nil {
+		// есть ffmpeg
+		// C:\Users\user_\go\bin\ffmpeg.exe
+		// log.Println(exe, lp, err, "exe, lp, err,")
+		if resolved, err := filepath.EvalSymlinks(lp); err == nil && resolved != exe {
+			// это внешний ffmpeg
+			// log.Println(resolved, err, resolved != exe, "resolved, err, resolved != exe")
+			// return 0, nil
+			qArgs[0] = lp
+			out(false)
 
-				cmd := exec.CommandContext(ctx, path, args...)
-				cmd.Dir = root
-				cmd.Stdin = os.Stdin
-				cmd.Stdout = writer
-				cmd.Stderr = os.Stderr
-				err = cmd.Run()
-				return uint32(cmd.ProcessState.ExitCode()), err
-			}
+			cmd := exec.CommandContext(ctx, lp, args...)
+			cmd.Dir = root
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = writer
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+			return uint32(cmd.ProcessState.ExitCode()), err
 		}
 	}
 	out(true)

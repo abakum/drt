@@ -109,7 +109,7 @@ var (
 		}
 		return v.(string), o
 	}
-	gui = trimExt(filepath.Base(strings.ToLower(os.Args[0]))) != drt
+	gui = strings.ToLower(args0) != drt
 )
 
 var _ = version.Ver
@@ -132,6 +132,11 @@ func main() {
 	log.SetFlags(log.Lshortfile)
 
 	exe, err = os.Executable()
+	if err == nil {
+		// Как в маке
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+
 	if err != nil {
 		if lp, err := exec.LookPath(args0); err == nil {
 			exe = lp
@@ -142,7 +147,7 @@ func main() {
 		}
 	}
 	wd, _ := os.Getwd()
-	log.Println(exe, VERSION, wd, gui)
+	log.Println(exe, VERSION, wd, args0)
 
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()
@@ -151,13 +156,13 @@ func main() {
 		if darwin && gui {
 			// Когда прерываем проограмму по Ctrl-C терминал не закрывает окно.
 			// Когда закрыто последнее окно терминал не закрывается.
-			title := `
+			exec.Command("osascript", "-e", `
 tell application "Terminal"
-	repeat with win in windows
-		repeat with t in tabs of win
-			if custom title of t is "` + repo + `" then
-				if frontmost of win then
-					close win
+	repeat with w in windows
+		repeat with t in tabs of w
+			if custom title of t is "`+repo+`" then
+				if frontmost of w then
+					close w
 					if not exists window 1 then
 						quit
 					end if
@@ -167,8 +172,7 @@ tell application "Terminal"
 		end repeat
 	end repeat
 end tell
-`
-			exec.Command("osascript", "-e", title).Start()
+`).Start()
 		}
 	})
 	// ctx, cncl = signal.NotifyContext(context.Background(), closer.DefaultSignalSet...)
@@ -199,7 +203,7 @@ end tell
 			}
 			// a:\b
 		}
-		log.Println("Каталог с infile", root)
+		// log.Println("Каталог с infile", root)
 		if root != "" {
 			ok = false
 			for i, arg := range os.Args[1:] {

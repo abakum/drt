@@ -45,26 +45,10 @@ on process(dropped_files)
 	end if
 
 	set repo to "com.github.abakum.drt"
-
-	on setTitle()
-		set custom title of first tab of front window to repo
-		activate
-	end setTitle
-
 	tell application "Terminal"
 		--When the script starts, Terminal sometimes creates an empty first window.
-		--The idea is to open the script in the first window if it doesn't already contain our script,
-		--and if it does contain our script, to open a new window instead.
-
-		-- repeat with win in windows
-		-- 	try
-		-- 		if custom title of first tab of win is repo then
-		-- 			do script shellCmd
-		-- 			setTitle()
-		-- 			return
-		-- 		end if
-		-- 	end try
-		-- end repeat
+		--The idea is to open the script in the first window if it doesn't already contain this script,
+		--and if it does contain this script, to open a new window instead.
 		
 		if (exists window 1) and not (custom title of first tab of window 1 is repo) then
 			try
@@ -76,7 +60,6 @@ on process(dropped_files)
 			do script shellCmd
 		end if
 
-		-- setTitle()
 		set custom title of first tab of front window to repo
 		activate
 	end tell

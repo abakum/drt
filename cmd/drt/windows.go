@@ -66,18 +66,20 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 		}
 		err = osLink(oldname, newname)
 		if err == nil {
+			log.Println("mklink", opt, newname, oldname)
 			return
+		}
+		if !amAdmin() {
+			wd, _ := os.Getwd()
+			err2 := ShellExecute("runas", "cmd", wd, 0, "/c", fmt.Sprintf(`mklink %s "%s" "%s"`, opt, newname, oldname))
+			if err2 == nil {
+				log.Println("mklink", opt, newname, oldname)
+				return err2
+			}
+			log.Println("Error run mklink as Administrator:", err2)
 		}
 		log.Printf(`Error creating %s link: %v
 `, m, err)
-		if !amAdmin() {
-			wd, _ := os.Getwd()
-			err = ShellExecute("runas", "cmd", wd, 1, "/c", fmt.Sprintf(`mklink %s "%s" "%s"`, opt, newname, oldname))
-			if err == nil {
-				return
-			}
-			log.Println("Error run mklink as Administrator:", err)
-		}
 		return
 	}
 	name := trimExt(newname)
