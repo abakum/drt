@@ -119,7 +119,7 @@ var _ = version.Ver
 //go:embed VERSION
 var VERSION string
 
-//go:embed drt/drt.lua
+//go:embed lua/drt.lua
 var lua []byte
 
 func main() {
