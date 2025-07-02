@@ -53,6 +53,7 @@ func ShellExecute(verb, file, cwd string, showCmd int32, args ...string) (err er
 	return
 }
 
+// Создать ссылку
 func mkLink(oldname, newname string, link, hard bool) (err error) {
 	if link {
 		opt := ""
@@ -80,7 +81,7 @@ func mkLink(oldname, newname string, link, hard bool) (err error) {
 		return
 	}
 	name := trimExt(newname)
-	err = os.WriteFile(name+".cmd", []byte(oldname+" %*"), 0744)
+	err = os.WriteFile(name+".cmd", []byte(oldname+" %*"), 0755)
 	if err != nil {
 		log.Println("Error write .cmd:", err)
 	}

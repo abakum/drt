@@ -174,3 +174,7 @@ func OSACompile(src, trg string) error {
 
 	return nil
 }
+
+func mkLink(oldname, newname string, link, hard bool) (err error) {
+	return ln(oldname, newname, link, hard)
+}

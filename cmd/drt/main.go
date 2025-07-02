@@ -226,19 +226,6 @@ end tell
 
 	dir = filepath.Dir(exe)
 	ext = filepath.Ext(exe)
-	for _, ff := range []string{ffmpeg, ffprobe} {
-		ff = ff + ext
-		if _, err := exec.LookPath(ff); err != nil {
-			// Если не установлены ffmpeg или ffprobe
-			ffe := filepath.Join(dir, ff)
-			m := "Можно сделать ссылку"
-			if win {
-				log.Printf(`%s 'mklink /h "%s" "%s"'`+"\n", m, ffe, exe)
-			} else {
-				log.Printf(`%s 'ln "%s" "%s"'`+"\r\n", m, exe, ffe)
-			}
-		}
-	}
 
 	nautilus := os.Getenv("NAUTILUS_SCRIPT_SELECTED_FILE_PATHS")
 	nautilus = strings.TrimSpace(nautilus)
@@ -847,8 +834,23 @@ func help() {
 
 	if oldname == "" {
 		copy(nil, drt+dotLUA, DRS...)
+		for _, ff := range []string{ffmpeg, ffprobe} {
+			ff = filepath.Join(dir, ff+ext)
+			if f, err := open(ff); err == nil {
+				f.Close()
+				log.Println(ff, "~> nul", os.Remove(ff))
+			}
+		}
 	} else {
 		copy(lua, drt+dotLUA, DRS...)
+		for _, ff := range []string{ffmpeg, ffprobe} {
+			ff = ff + ext
+			if _, err := exec.LookPath(ff); err != nil {
+				// Если не установлены ffmpeg или ffprobe
+				ff = filepath.Join(dir, ff)
+				mkLink(exe, ff, true, false)
+			}
+		}
 	}
 	desktop := filepath.Join(xdg.UserDirs.Desktop, dr)
 	link := filepath.Join(dir, drTags)
@@ -1013,6 +1015,7 @@ func Values[Map ~map[K]V, K comparable, V any](m Map) (values []V) {
 	return
 }
 
+// Создать ссылку для Linux и darwin
 func ln(oldname, newname string, link, hard bool) (err error) {
 	if link {
 		opt := "-s"
@@ -1035,12 +1038,13 @@ func ln(oldname, newname string, link, hard bool) (err error) {
 
 set -o nounset
 set -o errexit
-`+oldname+` "${@}"`), 0744)
+`+oldname+` "${@}"`), 0755)
 	if err != nil {
 		log.Println("Error write .sh:", err)
 	}
 	return
 }
+
 func lenM(m *sync.Map) int {
 	var count int
 	m.Range(func(k, v interface{}) bool {

@@ -85,3 +85,7 @@ func evtp() {
 func SplitCommandLine(command string) ([]string, error) {
 	return shlex.Split(command)
 }
+
+func mkLink(oldname, newname string, link, hard bool) (err error) {
+	return ln(oldname, newname, link, hard)
+}
