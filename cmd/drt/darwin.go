@@ -55,6 +55,9 @@ func install(oldname string, lnks ...string) {
 		for _, lnk := range lnks {
 			log.Println(lnk, "~> /dev/null", os.RemoveAll(lnk))
 		}
+		// 	/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u /Applications/drt.app
+		//    killall Finder
+		//    killall Dock
 		return
 	}
 	ln(oldname, link, true, false)
@@ -177,4 +180,20 @@ func OSACompile(src, trg string) error {
 
 func mkLink(oldname, newname string, link, hard bool) (err error) {
 	return ln(oldname, newname, link, hard)
+}
+
+func unRegister(app string) {
+	// 1. Снять регистрацию приложения
+	err := exec.Command("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+		"-u", "/Applications/"+app).Run()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// 2. Сбросить кэш
+	exec.Command("killall", "Finder").Run()
+	exec.Command("killall", "Dock").Run()
+
+	log.Println("Ассоциации", app, "успешно сброшены!")
 }
