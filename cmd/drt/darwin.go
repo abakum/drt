@@ -111,22 +111,16 @@ func install(oldname string, lnks ...string) {
 	}
 	main = filepath.Join(main, "Resources", "Scripts")
 
-	// https://github.com/abbeycode/AppleScripts/blob/master/Services/Convert%20Script%20to%20Text.applescript
-	if _, err := exec.LookPath(drTags); err == nil {
-		return
-	}
 	scpt := filepath.Join(main, "main.scpt")
 	applescript := filepath.Join(main, "main.applescript")
-	data, err := os.ReadFile(applescript)
-	log.Println("<~", applescript, err)
-	if err != nil {
-		return
-	}
-	data = bytes.Replace(data, []byte(`"`+drTags+`"`), []byte(`"`+link+`"`), 1)
-	err = os.WriteFile(applescript, data, 0644)
-	log.Println("~>", applescript, err)
-	if err != nil {
-		return
+	if _, err := exec.LookPath(drTags); err != nil {
+		data, err := os.ReadFile(applescript)
+		log.Println("<~", applescript, err)
+		if err == nil {
+			data = bytes.Replace(data, []byte(`"`+drTags+`"`), []byte(`"`+link+`"`), 1)
+			err = os.WriteFile(applescript, data, 0644)
+			log.Println("~>", applescript, err)
+		}
 	}
 	log.Println(applescript, "~>", scpt, OSACompile(applescript, scpt))
 }

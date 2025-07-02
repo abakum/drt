@@ -149,6 +149,8 @@ func main() {
 	closer.Bind(cncl)
 	closer.Bind(func() {
 		if darwin && gui {
+			// Когда прерываем проограмму по Ctrl-C терминал не закрывает окно.
+			// Когда закрыто последнее окно терминал не закрывается.
 			title := `
 tell application "Terminal"
 	repeat with win in windows
@@ -156,18 +158,16 @@ tell application "Terminal"
 			if custom title of t is "` + repo + `" then
 				if frontmost of win then
 					close win
+					if not exists window 1 then
+						quit
+					end if
 				end
-				delay 1
-				if (count of windows) = 0 then
-					quit
-				end if
 				exit repeat
 			end if
 		end repeat
 	end repeat
 end tell
 `
-			// exec.Command("osascript", "-e", `tell application "Terminal" to close first window`).Start()
 			exec.Command("osascript", "-e", title).Start()
 		}
 	})

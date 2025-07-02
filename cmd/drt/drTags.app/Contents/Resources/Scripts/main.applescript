@@ -25,7 +25,7 @@ on process(dropped_files)
 				set fileType to type identifier of aFile
 				set filePath to POSIX path of aFile
 			end tell
-			
+
 			if (theExtensionsToProcess contains fileExtension) or (theTypeIdentifiersToProcess contains fileType) then
 				set end of validFiles to quoted form of filePath
 			end if
@@ -36,39 +36,48 @@ on process(dropped_files)
 	if (count of validFiles) > 0 then
 		set shellCmd to shellCmd & " " & joinList(validFiles, " ")
 	end if
-	
-	set commonTitle to "com.github.abakum.drt"
-	
+
+	if not (application "Terminal" exists) then
+		set commandToRun to "open -a drTags.app"
+		set the clipboard to commandToRun
+		display dialog "Paste" & commandToRun & "by press Cmd+V" buttons {"OK"} default button 1 with icon note
+		return
+	end if
+
+	set repo to "com.github.abakum.drt"
+
+	on setTitle()
+		set custom title of first tab of front window to repo
+		activate
+	end setTitle
+
 	tell application "Terminal"
-		-- ?????????? ??????? ????
-		set ourWindows to 0
-		repeat with win in windows
+		--When the script starts, Terminal sometimes creates an empty first window.
+		--The idea is to open the script in the first window if it doesn't already contain our script,
+		--and if it does contain our script, to open a new window instead.
+
+		-- repeat with win in windows
+		-- 	try
+		-- 		if custom title of first tab of win is repo then
+		-- 			do script shellCmd
+		-- 			setTitle()
+		-- 			return
+		-- 		end if
+		-- 	end try
+		-- end repeat
+		
+		if (exists window 1) and not (custom title of first tab of window 1 is repo) then
 			try
-				if custom title of first tab of win is commonTitle then
-					set ourWindows to ourWindows + 1
-				end if
-			end try
-		end repeat
-		
-		-- ?????????? ????????
-		try
-			if ourWindows = 0 then
-				if (count of windows) > 0 then
-					do script shellCmd in window 1
-				else
-					do script shellCmd
-				end if
-			else
+				do script shellCmd in window 1
+			on error
 				do script shellCmd
-			end if
-			
-			-- ????????????? ?????????
-			set custom title of first tab of front window to commonTitle
-		on error
-			-- ???? ???-?? ????? ?? ??? - ??????? ??????? ???????
+			end try
+		else
 			do script shellCmd
-		end try
-		
+		end if
+
+		-- setTitle()
+		set custom title of first tab of front window to repo
 		activate
 	end tell
 end process
