@@ -43,14 +43,14 @@ on process(dropped_files)
 		display dialog "Paste" & commandToRun & "by press Cmd+V" buttons {"OK"} default button 1 with icon note
 		return
 	end if
-
-	set repo to "com.github.abakum.drt"
+	
+	set bundleID to "com.github.abakum.drt"
 	tell application "Terminal"
 		--When the script starts, Terminal sometimes creates an empty first window.
 		--The idea is to open the script in the first window if it doesn't already contain this script,
 		--and if it does contain this script, to open a new window instead.
 		
-		if (exists window 1) and not (custom title of first tab of window 1 is repo) then
+		if (exists window 1) and not (custom title of first tab of window 1 is bundleID) then
 			try
 				do script shellCmd in window 1
 			on error
@@ -60,7 +60,7 @@ on process(dropped_files)
 			do script shellCmd
 		end if
 
-		set custom title of first tab of front window to repo
+		set custom title of first tab of front window to bundleID
 		activate
 	end tell
 end process
