@@ -43,6 +43,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gofrs/flock"
+	"github.com/kballard/go-shellquote"
 	"github.com/xlab/closer"
 	"golang.org/x/text/encoding/unicode"
 )
@@ -50,6 +51,7 @@ import (
 const (
 	drt     = "drt"    // для консоли
 	drTags  = "drTags" // для GUI
+	drtlet  = "drtlet" // для дроплета
 	repo    = "com.github.abakum." + drt
 	dotCSV  = ".csv"
 	dotMOV  = ".mov"
@@ -128,6 +130,41 @@ func main() {
 		file string
 		err  error
 	)
+	if darwin && strings.ToLower(args0) == drtlet {
+		cmd := drTags
+		if len(os.Args) > 1 {
+			cmd += " " + shellquote.Join(os.Args[1:]...)
+		}
+		exec.Command("osascript", "-e", `
+	set shellCmd to "`+cmd+`"	
+	set bundleID to "`+repo+`"
+	if not (application "Terminal" exists) then
+		set commandToRun to "open -a `+drTags+`.app"
+		set the clipboard to commandToRun
+		display dialog "Paste" & commandToRun & "by press Cmd+V" buttons {"OK"} default button 1 with icon note
+		return
+	end if
+	tell application "Terminal"
+		--When the script starts, Terminal sometimes creates an empty first window.
+		--The idea is to open the script in the first window if it doesn't already contain this script,
+		--and if it does contain this script, to open a new window instead.
+		
+		if (exists window 1) and not (custom title of first tab of window 1 is bundleID) then
+			try
+				do script shellCmd in window 1
+			on error
+				do script shellCmd
+			end try
+		else
+			do script shellCmd
+		end if
+
+		set custom title of first tab of front window to bundleID
+		activate
+	end tell
+`).Start()
+		return
+	}
 
 	log.SetFlags(log.Lshortfile)
 
@@ -861,7 +898,7 @@ func help() {
 
 	switch runtime.GOOS {
 	case "darwin":
-		install(oldname, adr, link)
+		install(oldname, adr, link, filepath.Join(dir, drtlet))
 	case "windows":
 		install(oldname,
 			desktop,
