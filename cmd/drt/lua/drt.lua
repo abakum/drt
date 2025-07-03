@@ -26,7 +26,7 @@ local FORMAT = "png"
 local CODEC = "RGB8"
 local FORMATb = "tif"
 local CODECb = "RGB8LZW"
-local TL ="/tl/"
+local DRT ="/drt/"
 
 local function getDir(path)
     -- Replace all backslashes with forward slashes for consistency
@@ -284,7 +284,16 @@ function Rename(oldName, newName)
     if not wideNew then
         return nil, err
     end
-    
+
+	local attrs = ffi.C.GetFileAttributesW(wideNew)
+	local FILE_ATTRIBUTE_DIRECTORY = 0x10
+	local INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
+    if attrs ~= INVALID_FILE_ATTRIBUTES and bit.band(attrs, FILE_ATTRIBUTE_DIRECTORY) ~= 0 then
+        return nil, "Ошибка: путь ведёт к каталогу"
+    end
+
+    ffi.C.DeleteFileW(wideNew)
+
     if ffi.C.MoveFileW(wideOld, wideNew) == 0 then
         return nil, "Ошибка перемещения файла: " .. ffi.C.GetLastError()
     end
@@ -299,11 +308,12 @@ local function main()
     local output, tlClips= rootTimeLines()
     assert(output ~= "","Пустой медиапул")
     assert(next(tlClips) ,"Нет таймлайнов")
-    bmd.createdir(output..TL)
+    bmd.createdir(output..DRT)
 
     print("Экспорт метаданных в .csv")
     print("Экспорт кадров помеченных маркером с длительностью 00:00:00:01 в .png или .tif")
     print("Экспорт маркеров с длительностью больше 00:00:00:01 в .srt или с панели Cut в .vtt")
+    print("Экспорт маркеров в .edl")
     print("Резервирования таймлана в .drt")
     print("Резервирования шаблонов экспорта с панели Deliver")
 
@@ -314,6 +324,8 @@ local function main()
 								wchar_t* lpWideCharStr, int cchWideChar);
 			int MoveFileW(const wchar_t* lpExistingFileName, const wchar_t* lpNewFileName);
 			unsigned long GetLastError();
+			unsigned long GetFileAttributesW(const wchar_t* lpFileName);
+			int DeleteFileW(const wchar_t* lpFileName);
 		]]
 	end
     
@@ -345,7 +357,7 @@ local function main()
             local frame_rate = luaresolve.frame_rates:get_decimal(timeline:GetSetting("timelineFrameRate"))
             local drop_frame = timeline:GetSetting("timelineDropFrameTimecode") == "1"
             local name = sanitizeFilename(tln)
-            local file = output .. TL .. name .. ".drt"
+            local file = output .. DRT .. name .. ".drt"
             if not all then
                 -- Экспортируем в .drt
                 if timeline:Export(file, resolve.EXPORT_DRT, resolve.EXPORT_NONE) then
@@ -356,7 +368,7 @@ local function main()
 			if Page=="cut" then
 	            st="vtt"
 			end
-            file = output .. TL .. name .. "."..st
+            file = output .. DRT .. name .. "."..st
 
             local markers = timeline:GetMarkers()
             local marker_frames = {}
@@ -384,6 +396,22 @@ local function main()
 
                 if all or color == marker.color then
                     count = count + 1
+
+					local data =
+					{
+						index = count,
+						frame = sourceF,
+						name = marker.name,
+						start_tc = luaresolve:timecode_from_frame(sourceF, frame_rate, drop_frame),
+						end_tc = luaresolve:timecode_from_frame(sourceF + marker.duration, frame_rate, drop_frame),
+						duration_tc = luaresolve:timecode_from_frame(marker.duration, frame_rate, drop_frame),
+						duration_time = luaresolve:time_from_frame(marker.duration, frame_rate).time,
+						duration_frames = marker.duration,
+						color = marker.color,
+						note = marker.note,
+						custom_data = marker.customData,
+					}
+					marker_table[#marker_table+1] = data
                     
                     if marker.duration==1 then
                         -- Ели короткое значит картинка
@@ -398,22 +426,6 @@ local function main()
 						luaresolve:timecode_from_frame(sourceF, frame_rate, drop_frame),
 						tlClip,
 						frame_rate)
-                    else
-						local data =
-						{
-							index = count,
-							frame = recordF,
-							name = marker.name,
-							start_tc = luaresolve:timecode_from_frame(recordF, frame_rate, drop_frame),
-							end_tc = luaresolve:timecode_from_frame(recordF + frame + marker.duration, frame_rate, drop_frame),
-							duration_tc = luaresolve:timecode_from_frame(marker.duration, frame_rate, drop_frame),
-							duration_time = luaresolve:time_from_frame(marker.duration, frame_rate).time,
-							duration_frames = marker.duration,
-							color = marker.color,
-							note = marker.note,
-							custom_data = marker.customData,
-						}
-                        marker_table[#marker_table+1] = data
                     end
                 end
             end
@@ -426,7 +438,10 @@ local function main()
             if next(marker_table) then
 				-- dump(marker_table)
 				print("Субтитры из маркеров ~> "..file)
-                export_subtitles(marker_table, st, file, frame_rate)
+                export_subtitles(marker_table, st, file, frame_rate, Inf)
+				file = output .. DRT .. name .. ".edl"
+				print("Маркеры ~> "..file)
+                export_markers(marker_table, file, frame_rate, drop_frame, In, tlClip:GetClipProperty("Out"), tln)
             end
             
             -- Инициализируем таблицу для этого таймлайна
@@ -572,29 +587,88 @@ local function export_youtube_chapters(marker_table, filename)
     write_file(filename, table.concat(chapters, "\n"))
 end
 
-function export_subtitles(marker_table, format, filename, frame_rate)
+function export_subtitles(marker_table, format, filename, frame_rate, Inf)
     local subtitles = {}
 
     if format == "vtt" then
         subtitles[#subtitles+1] = "WEBVTT\n"
     end
 
+	local empty=true
     for index, marker_data in ipairs(marker_table) do
-        local start_time = luaresolve:time_from_frame(marker_data.frame, frame_rate).time
-        local end_time = luaresolve:time_from_frame(marker_data.frame + marker_data.duration_frames, frame_rate).time
+		-- Кортотким маркером помечаем кадр а не субтитр
+		-- InOut это тоже не субтитр а резерв MarkIn и MarkOut
+		if (marker_data.duration_frames > 1) and marker_data.name ~="InOut" then
+			-- В marker_data.frame лежит source frame  для субтитров нужен record frame
+			local frame=math.max(0, marker_data.frame - Inf)
+			local start_time = luaresolve:time_from_frame(frame, frame_rate).time
+			local end_time = luaresolve:time_from_frame(frame + marker_data.duration_frames, frame_rate).time
 
-        if format == "srt" then
-            start_time = start_time:gsub("%.", ",")
-            end_time = end_time:gsub("%.", ",")
-        end
-		local text=marker_data.name
-		if marker_data.note~="" then
-			text=marker_data.note
+			if format == "srt" then
+				start_time = start_time:gsub("%.", ",")
+				end_time = end_time:gsub("%.", ",")
+			end
+			local text=marker_data.name
+			if marker_data.note~="" then
+				text=marker_data.note
+			end
+			subtitles[#subtitles+1] = string.format("%s\n%s --> %s\n%s\n", index, start_time, end_time, text)
+			empty=false
 		end
-        subtitles[#subtitles+1] = string.format("%s\n%s --> %s\n%s\n", index, start_time, end_time, text)
     end
 
-    write_file(filename, table.concat(subtitles, "\n"))
+	if not empty then
+	    write_file(filename, table.concat(subtitles, "\n"))
+	end
+end
+
+function export_markers(marker_table, filename, frame_rate, drop_frame, In, Out, tln)
+	-- DR пишет в edl source_tc tc(source+1)
+    local lines = {}
+	lines[#lines+1] = string.format("TITLE: %s\n" .. 
+									"FCM: %sDROP FRAME\n",
+									tln,
+									iif(drop_frame, "","NON-"))
+
+	local InF = 0
+	local end_tc=""
+    for index, marker_data in ipairs(marker_table) do
+		InF = luaresolve:frame_from_timecode(marker_data.start_tc, frame_rate)
+		end_tc = luaresolve:timecode_from_frame(InF + 1, frame_rate, drop_frame)
+
+        lines[#lines+1] = string.format("%03d  001      V     C        %s %s %s %s\n" ..
+										"%s |C:ResolveColor%s |M:%s |D:%d\n",
+										index, marker_data.start_tc, end_tc, marker_data.start_tc, end_tc,
+										marker_data.note, marker_data.color, marker_data.name, marker_data.duration_frames
+									)
+    end
+
+	InF = 0
+	if In == "" then
+		In="00:00:00:00"
+	else
+		InF = luaresolve:frame_from_timecode(In, frame_rate)
+	end
+
+	local OutF = InF + 1
+	if Out == "" then
+		Out = luaresolve:timecode_from_frame(OutF, frame_rate, drop_frame)
+	else
+		OutF = luaresolve:frame_from_timecode(Out, frame_rate)
+	end
+
+	end_tc = luaresolve:timecode_from_frame(InF + 1, frame_rate, drop_frame)
+
+	-- Резервирую MarkIn и MarkOut
+	local start_time = luaresolve:time_from_frame(InF, frame_rate).time
+	local end_time = luaresolve:time_from_frame(OutF, frame_rate).time	
+	lines[#lines+1] = string.format("%03d  001      V     C        %s %s %s %s\n" ..
+									"%s %s |C:ResolveColor%s |M:%s |D:%d",
+									#lines, In, end_tc, In, end_tc,
+									start_time, end_time, "Lavender","InOut", OutF - InF
+								)
+
+    write_file(filename, table.concat(lines, "\n"))
 end
 
 stringex =
