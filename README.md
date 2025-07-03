@@ -1,10 +1,10 @@
 
-# drTags ─ Tagger для DaVinci Resolve
+# drTags ─ Tagger для `DaVinci Resolve`
 
 ```
 drt file [...fileN] [tag1=val1 [...tagN=valN]]
 ```
- - Где file...fileN это медиафайлы или файлы `.csv` от DaVinci Resolve c `Description` или `Keywords` в которых указаны тэги или `-` если файлы и тэги передаются через конвейер `|` или пусто но не пусто `$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS`
+ - Где file...fileN это медиафайлы или файлы `.csv` от `DaVinci Resolve` c `Description` или `Keywords` в которых указаны тэги или `-` если файлы и тэги передаются через конвейер `|` или пусто но не пусто `$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS`
  - Если в файле `20220626 Концерт\14.csv` есть таймлайн
 `20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2` и клип с `pcm` в
 `20220626 Концерт\20220626 Концерт 14 Прокофьев Соната для фортепиано №2 ре минор части 1 2.mov` 
@@ -94,6 +94,27 @@ MovementName=2 Scherzo Allegro marcato
   - в `pcm` в `alac` или `flac` и ввести `==` то запишу `a.flac` и `a.mp3`
   - иначе запишу `a.mp3` если аудиофайл не `a.mp3`
 - Если в видеофайле с `mpegts` например `a.ts` ввести `==` то запишу `a.ts.mov`
+
+# drt.lua
+
+- Из `DaVinci Resole` с панели `Media` можно вручную:
+  - Эспортировать метаданные в .csv файлы: File~>Export Metadata From~>Selected Media Pool Clips
+  - Сохранять таймлайны в .drt файлы: File~>Export~>Timeline
+  - Сохранять маркеры таймлайнов в .edl файлы: ПКМ на таймлайне~>Timelines~>Export~>Timelines Margers To EDL
+- Из `DaVinci Resole` с панели `Deliver` можно вручную:
+  - Эспортировать кадры в .tif или .png файлы.
+- Но с помощью скрипта `drt.lua` это веселей:
+  - Workspace~>Console
+  - Workspace~>Scripts~>drt
+- Пусть исходные медиафайлы лежат в каталоге `foo/` а таймлайн называется `bar`. Вот что сделает `drt.lua`:
+  - Экспорт метаданных в `foo/bar.csv`
+  - Если стать на синий маркер то только синие маркеры будут экспортированы.
+  - Экспорт кадров помеченных маркером с длительностью 00:00:00:01 в `foo/bar.png` или `foo/bar.tif`
+  - Экспорт маркеров с длительностью больше 00:00:00:01 в `foo/drt/bar.srt` или с панели `Cut` в `foo/drt/bar.vtt`
+  - Экспорт маркеров и MarkIn MarkOut в `foo/drt/bar.edl`
+  - С панели `Media` всё вышеперечисленное для всех таймлайнов.
+  - Резервирование таймлана в `foo/drt/bar.drt`
+  - Резервирование шаблона экспорта с панели `Deliver` в `foo.xml`
 
 # Ссылочки
 

@@ -346,8 +346,6 @@ local function main()
     print("Экспорт кадров помеченных маркером с длительностью 00:00:00:01 в .png или .tif")
     print("Экспорт маркеров с длительностью больше 00:00:00:01 в .srt или с панели Cut в .vtt")
     print("Экспорт маркеров и MarkIn MarkOut в .edl")
-    print("Резервирования таймлана в .drt")
-    print("Резервирования шаблонов экспорта с панели Deliver")
 
 	if Windows then
 		ffi.cdef[[
@@ -373,8 +371,10 @@ local function main()
 	Page=resolve:GetCurrentPage()
     if Page ~= "media" then
 		print("С панелей кроме Media только для одного таймлайна ~> "..ctlName)
+		print("Резервирование таймлана в .drt")
+		print("Резервирование шаблона экспорта с панели Deliver")
     else
-		print("С панели Media для всех таймлайнов")
+		print("С панели Media всё вышеперечисленное для всех таймлайнов")
         all=true
     end
 
@@ -427,9 +427,9 @@ local function main()
 						end
 					end
 				end
-			end
-			if color=="" then
-				print("Курсор не стоит на маркере. Маркеры всех цветов будут экспортированы.")
+				if color=="" then
+					print("Курсор не стоит на маркере. Маркеры всех цветов будут экспортированы.")
+				end
 			end
 
             local count = 0
