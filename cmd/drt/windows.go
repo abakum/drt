@@ -34,6 +34,7 @@ var (
 	}
 )
 
+// Эта функция amAdmin() проверяет, запущена ли программа с правами администратора в Windows.
 func amAdmin() bool {
 	f, err := os.Open("\\\\.\\PHYSICALDRIVE0")
 	if err != nil {
@@ -43,6 +44,8 @@ func amAdmin() bool {
 	return true
 }
 
+// Эта функция реализует вызов Windows API-функции ShellExecute,
+// которая запускает файл или выполняет операцию (например, открытие/печать) с указанным файлом.
 func ShellExecute(verb, file, cwd string, showCmd int32, args ...string) (err error) {
 	verbPtr, _ := syscall.UTF16PtrFromString(verb)
 	filePtr, _ := syscall.UTF16PtrFromString(file)
@@ -53,7 +56,8 @@ func ShellExecute(verb, file, cwd string, showCmd int32, args ...string) (err er
 	return
 }
 
-// Создать ссылку
+// Эта функция mkLink реализует создание символических или жёстких ссылок на файлы в Windows,
+// с учётом необходимости запуска с правами администратора и возможностью создания .cmd-файла как альтернативы.
 func mkLink(oldname, newname string, link, hard bool) (err error) {
 	if link {
 		opt := ""
@@ -121,6 +125,7 @@ func install(oldname string, lnks ...string) {
 			log.Println(oldname, "~>", sc.ShortcutPath, shortcut.Create(sc))
 		}
 	}
+	// Создаю меню Открыть с помощью
 	reg, err := os.CreateTemp("", drt+"*.reg")
 	log.Println(reg.Name(), err)
 	if err != nil {
@@ -130,14 +135,14 @@ func install(oldname string, lnks ...string) {
 	defer reg.Close()
 	var sb strings.Builder
 	if oldname == "" {
-		// uninstall
+		// Разрегистрируем
 		sb.WriteString(head)
 		appPaths(&sb, drt)
 		applications(&sb, bin)
 		progIDs(&sb, vendor, prog)
 		registeredApplications(&sb, vendor, prog)
 	} else {
-		// install
+		// Регистрируем
 		// https://learn.microsoft.com/en-us/windows/win32/shell/app-registration
 		sb.WriteString(head)
 		appPaths(&sb, drt, path)
@@ -296,6 +301,8 @@ func TypeByExtension(sb *strings.Builder) {
 	}
 }
 
+// Эта функция уведомляет операционную систему Windows о смене ассоциаций файлов или программ,
+// чтобы обновить кэшированные данные и визуальные элементы системы.
 func NotifySystemOfNewRegistration() {
 	// https://learn.microsoft.com/en-us/windows/win32/shell/default-programs
 	const (
@@ -322,6 +329,13 @@ func qq(exe string) (path string) {
 	return
 }
 
+// Настраивает терминал Windows для поддержки ANSI-экранирования (цвета, стили текста) через виртуальный терминал (Virtual Terminal Processing).
+// В Windows 10, 11 и 2004 (Build 22000 и выше) поддерживается только для консоли, а не для всех приложений.
+// В Windows 7 и 8, поддерживается только для консоли.
+// В Windows 8.1 и 10, поддерживается только для консоли и приложения, запущенных с помощью командной строки.
+// В Windows 10, поддерживается только для консоли и приложений, запущенных с помощью командной строки.
+// В Windows 11, поддерживается только для консоли и приложений, запущенных с помощью командной строки.
+// В Windows 2004 (Build 22000) и выше, поддерживается только для консоли и приложений, запущенных с помощью командной строки.
 func evtp() {
 	stdout := windows.Handle(os.Stdout.Fd())
 	var originalMode uint32
@@ -331,4 +345,7 @@ func evtp() {
 
 func SplitCommandLine(command string) ([]string, error) {
 	return windows.DecomposeCommandLine(command)
+}
+func onMain() {
+
 }

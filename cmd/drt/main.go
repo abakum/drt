@@ -43,15 +43,14 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gofrs/flock"
-	"github.com/kballard/go-shellquote"
 	"github.com/xlab/closer"
 	"golang.org/x/text/encoding/unicode"
 )
 
 const (
-	drt     = "drt"    // для консоли
-	drTags  = "drTags" // для GUI
-	drtlet  = "drtlet" // для дроплета
+	drt     = "drt"     // для консоли
+	drTags  = "drTags"  // для GUI
+	droplet = "droplet" // для дроплета
 	repo    = "com.github.abakum." + drt
 	dotCSV  = ".csv"
 	dotMOV  = ".mov"
@@ -130,44 +129,9 @@ func main() {
 		file string
 		err  error
 	)
-	if darwin && strings.ToLower(args0) == drtlet {
-		cmd := drTags
-		if len(os.Args) > 1 {
-			cmd += " " + shellquote.Join(os.Args[1:]...)
-		}
-		exec.Command("osascript", "-e", `
-	set shellCmd to "`+cmd+`"	
-	set bundleID to "`+repo+`"
-	if not (application "Terminal" exists) then
-		set commandToRun to "open -a `+drTags+`.app"
-		set the clipboard to commandToRun
-		display dialog "Paste" & commandToRun & "by press Cmd+V" buttons {"OK"} default button 1 with icon note
-		return
-	end if
-	tell application "Terminal"
-		--When the script starts, Terminal sometimes creates an empty first window.
-		--The idea is to open the script in the first window if it doesn't already contain this script,
-		--and if it does contain this script, to open a new window instead.
-		
-		if (exists window 1) and not (custom title of first tab of window 1 is bundleID) then
-			try
-				do script shellCmd in window 1
-			on error
-				do script shellCmd
-			end try
-		else
-			do script shellCmd
-		end if
-
-		set custom title of first tab of front window to bundleID
-		activate
-	end tell
-`).Start()
-		return
-	}
 
 	log.SetFlags(log.Lshortfile)
-
+	onMain()
 	exe, err = os.Executable()
 	if err == nil {
 		// Как в маке
@@ -874,7 +838,8 @@ func help() {
 	defer ctrlC()
 
 	if oldname == "" {
-		copy(nil, drt+dotLUA, DRS...)
+		copy(nil, drt+dotLUA, DRS...) // Убираем lua
+		// Убираем ffmpeg и ffprobe
 		for _, ff := range []string{ffmpeg, ffprobe} {
 			ff = filepath.Join(dir, ff+ext)
 			if f, err := open(ff); err == nil {
@@ -883,7 +848,8 @@ func help() {
 			}
 		}
 	} else {
-		copy(lua, drt+dotLUA, DRS...)
+		copy(lua, drt+dotLUA, DRS...) // Копируем lua
+		// Устанавливаем ffmpeg и ffprobe
 		for _, ff := range []string{ffmpeg, ffprobe} {
 			ff = ff + ext
 			if _, err := exec.LookPath(ff); err != nil {
@@ -893,23 +859,27 @@ func help() {
 			}
 		}
 	}
+	// Дроплет на рабочем столе
 	desktop := filepath.Join(xdg.UserDirs.Desktop, dr)
 	link := filepath.Join(dir, drTags)
 
 	switch runtime.GOOS {
 	case "darwin":
-		install(oldname, adr, link, filepath.Join(dir, drtlet))
+		install(oldname, adr, link)
 	case "windows":
 		install(oldname,
 			desktop,
+			// Меню в Эксплорере
 			filepath.Join(xdg.DataDirs[0], `Microsoft\Windows\SendTo`, dr),
 			adr,
 		)
 	case "linux":
+		// Меню в Наутилусе
 		sh := filepath.Join(xdg.DataHome, "nautilus/scripts", drTags)
 		xdgDesktopIcon := "xdg-desktop-icon"
 
 		if verb == "uninstall" {
+			// Удаляем дроплет
 			cmd := exec.CommandContext(ctx, xdgDesktopIcon, verb, desktop)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
@@ -917,13 +887,15 @@ func help() {
 			err = cmd.Run()
 			log.Println(cmd.Args, err)
 			if err != nil {
+				// Выстрел в голову
 				log.Println(desktop, "~> /dev/null", os.Remove(desktop))
 			}
 
 			for _, lnk := range []string{adr, link, sh} {
-				log.Println(lnk, "~> /dev/null", os.Remove(lnk))
+				log.Println(lnk, "~> /dev/null", os.Remove(lnk)) // Удаляем ссылки
 			}
 
+			// Обновляем меню Открыть с помощью
 			cmd = exec.CommandContext(ctx, "update-desktop-database", applications)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout

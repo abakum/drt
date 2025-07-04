@@ -89,3 +89,7 @@ func SplitCommandLine(command string) ([]string, error) {
 func mkLink(oldname, newname string, link, hard bool) (err error) {
 	return ln(oldname, newname, link, hard)
 }
+
+func onMain() {
+
+}
