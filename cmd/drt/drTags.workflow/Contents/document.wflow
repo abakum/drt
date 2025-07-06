@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>AMApplicationBuild</key>
+    <string>512.1</string>
+    <key>AMApplicationVersion</key>
+    <string>2.10</string>
+    <key>AMDocumentVersion</key>
+    <string>2</string>
+    <key>actions</key>
+    <array>
+        <dict>
+            <key>action</key>
+            <dict>
+                <key>ActionBundlePath</key>
+                <string>/System/Library/Automator/Run AppleScript.action</string>
+                <key>ActionName</key>
+                <string>Запустить AppleScript</string>
+                <key>ActionParameters</key>
+                <dict>
+                    <key>source</key>
+                    <string><![CDATA[]]></string>
+                </dict>
+                <key>BundleIdentifier</key>
+                <string>com.apple.Automator.RunScript</string>
+                <key>InputUUID</key>
+                <string>3B6A10FB-421C-4282-AC06-972618D63547</string>
+                <key>OutputUUID</key>
+                <string>ACD60D4F-3671-48A5-A7D6-B7FE683FDA8A</string>
+            </dict>
+        </dict>
+    </array>
+    <key>workflowMetaData</key>
+    <dict>
+        <key>inputTypeIdentifier</key>
+        <string>com.apple.Automator.fileSystemObject</string>
+        <key>outputTypeIdentifier</key>
+        <string>com.apple.Automator.nothing</string>
+        <key>presentationMode</key>
+        <integer>15</integer>
+        <key>systemImageName</key>
+        <string>NSActionTemplate</string>
+        <key>workflowTypeIdentifier</key>
+        <string>com.apple.Automator.servicesMenu</string>
+    </dict>
+</dict>
+</plist>

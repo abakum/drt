@@ -131,7 +131,6 @@ func main() {
 	)
 
 	log.SetFlags(log.Lshortfile)
-	onMain()
 	exe, err = os.Executable()
 	if err == nil {
 		// Как в маке
@@ -148,7 +147,8 @@ func main() {
 		}
 	}
 	wd, _ := os.Getwd()
-	log.Println(exe, VERSION, wd, args0)
+	log.Println(exe, VERSION, wd, os.Args[0])
+	onMain()
 
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()
@@ -1128,7 +1128,7 @@ func copy(srcFile []byte, base string, DRS ...string) (err error) {
 		_, err = destFile.Write(srcFile)
 		return
 	}
-	err = fmt.Errorf("Не установлен DaVinci Resolve")
+	err = fmt.Errorf("не установлен DaVinci Resolve")
 	log.Println(base, "~>", DRS, err)
 	return
 }

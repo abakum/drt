@@ -124,29 +124,5 @@
 	<string>drt</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
-	<key>CFBundleSignature</key>
-	<string>dplt</string>
-	<key>LSMinimumSystemVersionByArchitecture</key>
-	<dict>
-		<key>x86_64</key>
-		<string>10.6</string>
-	</dict>
-	<key>LSRequiresCarbon</key>
-	<true/>
-	<key>WindowState</key>
-	<dict>
-		<key>dividerCollapsed</key>
-		<false/>
-		<key>eventLogLevel</key>
-		<integer>-1</integer>
-		<key>name</key>
-		<string>ScriptWindowState</string>
-		<key>positionOfDivider</key>
-		<real>583</real>
-		<key>savedFrame</key>
-		<string>-1261 566 853 744 -2560 0 2560 1600 </string>
-		<key>selectedTabView</key>
-		<string>event log</string>
-	</dict>
 </dict>
 </plist>
