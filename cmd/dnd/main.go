@@ -56,12 +56,24 @@ static void sendToGo(const char* msg) {
 }
 @end
 
-void StartApp() {
+@interface AppDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation AppDelegate
+- (void)applicationWillFinishLaunching:(NSNotification *)notification {
     NSWindow *window = [[NSWindow alloc]
         initWithContentRect:NSMakeRect(0, 0, 150, 50)
-                  styleMask:NSWindowStyleMaskTitled
+                  styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
                     backing:NSBackingStoreBuffered
                       defer:NO];
+
+    // Настройки окна
+    window.level = NSFloatingWindowLevel; // Поверх всех окон
+    window.collectionBehavior = NSWindowCollectionBehaviorFullScreenNone; // Без полноэкранного режима
+    window.styleMask &= ~NSWindowStyleMaskResizable; // Без изменения размера
+
+    // Отключаем Dock-иконку
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 
     DragView *dragView = [[DragView alloc] initWithFrame:window.contentView.bounds];
     [window.contentView addSubview:dragView];
@@ -69,8 +81,18 @@ void StartApp() {
     [window setTitle:@"Drag and Drop for drTags"];
     [window center];
     [window makeKeyAndOrderFront:nil];
+}
 
-    [[NSApplication sharedApplication] run];
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
+    return YES;
+}
+@end
+
+void StartApp() {
+    [NSApplication sharedApplication];
+    AppDelegate *delegate = [[AppDelegate alloc] init];
+    [NSApp setDelegate:delegate];
+    [NSApp run];
 }
 */
 import "C"
@@ -82,7 +104,6 @@ import (
 )
 
 func unixSocketListener() {
-	// Удаляем старый сокет (если существует)
 	os.Remove("/tmp/dragdrop.sock")
 
 	sock, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
@@ -105,7 +126,6 @@ func unixSocketListener() {
 
 	fmt.Println("UNIX socket listener started")
 
-	// Обработка Ctrl+C для очистки сокета
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -137,5 +157,5 @@ func unixSocketListener() {
 
 func main() {
 	go unixSocketListener()
-	C.StartApp() // Запускаем GUI
+	C.StartApp()
 }
