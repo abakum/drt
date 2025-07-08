@@ -1,7 +1,8 @@
 //go:build windows
 // +build windows
 
-//go:generate go build -o C:\Users\user_\go\bin\dnd.exe -ldflags "-s -w -H=windowsgui"
+//go:generate cmd /c go build -o %GOPATH%\bin\wdnd.exe -ldflags "-s -w -H=windowsgui"
+
 package main
 
 import (
