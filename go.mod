@@ -2,7 +2,6 @@ module github.com/abakum/drt
 
 go 1.22.0
 
-toolchain go1.22.2
 
 replace golang.org/x/term => golang.org/x/term v0.10.0
 
