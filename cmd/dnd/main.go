@@ -1,3 +1,6 @@
+// Всего 2 мегабайта
+//go:build darwin
+
 package main
 
 /*
@@ -62,7 +65,7 @@ static void sendToGo(const char* msg) {
 @implementation AppDelegate
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
     NSWindow *window = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(0, 0, 150, 50)
+        initWithContentRect:NSMakeRect(0, 0, 100, 80)
                   styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
                     backing:NSBackingStoreBuffered
                       defer:NO];
@@ -78,7 +81,7 @@ static void sendToGo(const char* msg) {
     DragView *dragView = [[DragView alloc] initWithFrame:window.contentView.bounds];
     [window.contentView addSubview:dragView];
 
-    [window setTitle:@"Drag and Drop for drTags"];
+    [window setTitle:@"dr&Tags"];
     [window center];
     [window makeKeyAndOrderFront:nil];
 }

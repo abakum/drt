@@ -1,3 +1,4 @@
+// Всего 2 мегабайта
 //go:build windows
 // +build windows
 
@@ -29,8 +30,8 @@ type DragDropWindow struct {
 func NewDragDropWindow() *DragDropWindow {
 	wnd := ui.NewMain(
 		ui.OptsMain().
-			Title("drag&Tags").
-			Size(ui.Dpi(120, 100)).
+			Title("dr&Tags").
+			Size(ui.Dpi(100, 80)).
 			Style(co.WS_SYSMENU | co.WS_CAPTION).             // Минимальный стиль окна
 			ExStyle(co.WS_EX_ACCEPTFILES | co.WS_EX_TOPMOST). // Прием файлов + поверх всех окон
 			ClassIconId(101),                                 // Иконка из ресурсов

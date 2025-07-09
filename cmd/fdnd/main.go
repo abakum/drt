@@ -1,3 +1,4 @@
+// Монстр 30 мегабайт
 // sudo apt-get install gcc-mingw-w64-x86-64
 //
 // -go:generate bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -tags=opengl -ldflags \"-s -w -H=windowsgui\""
@@ -20,8 +21,8 @@ import (
 func main() {
 	// Создаём приложение
 	myApp := app.New()
-	myWindow := myApp.NewWindow("drag&Tags")
-	myWindow.Resize(fyne.NewSize(120, 100))
+	myWindow := myApp.NewWindow("dr&Tags")
+	myWindow.Resize(fyne.NewSize(100, 80))
 	myWindow.SetFixedSize(true) // Запрещаем изменение размера
 
 	// Обработка перетаскивания файлов
