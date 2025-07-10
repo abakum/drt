@@ -1,4 +1,5 @@
 //go:build darwin
+// +build darwin
 
 package main
 
@@ -14,7 +15,8 @@ package main
 #include <stdlib.h>
 #include <string.h>
 
-static void sendToGo(const char* msg, const char* sockPath) {
+// ===== 1. Функция отправки сообщения =====
+static void sendToSocket(const char* msg, const char* sockPath) {
     int clientSock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (clientSock == -1) return;
 
@@ -32,18 +34,44 @@ static void sendToGo(const char* msg, const char* sockPath) {
     close(clientSock);
 }
 
-@interface DragView : NSView <NSDraggingDestination>
-{
+// ===== 2. Делегат окна =====
+@interface WindowDelegate : NSObject <NSWindowDelegate> {
     const char* sockPath;
 }
-- (instancetype)initWithFrame:(NSRect)frameRect socketPath:(const char*)path;
+- (id)initWithSocketPath:(const char*)path;
+@end
+
+@implementation WindowDelegate
+- (id)initWithSocketPath:(const char*)path {
+    self = [super init];
+    if (self) {
+        sockPath = strdup(path);
+    }
+    return self;
+}
+
+- (void)windowWillClose:(NSNotification *)notification {
+    sendToSocket("", sockPath);
+}
+
+- (void)dealloc {
+    free((void*)sockPath);
+    [super dealloc];
+}
+@end
+
+// ===== 3. View для перетаскивания =====
+@interface DragView : NSView <NSDraggingDestination> {
+    const char* sockPath;
+}
+- (id)initWithFrame:(NSRect)frameRect socketPath:(const char*)path;
 @end
 
 @implementation DragView
-- (instancetype)initWithFrame:(NSRect)frameRect socketPath:(const char*)path {
+- (id)initWithFrame:(NSRect)frameRect socketPath:(const char*)path {
     self = [super initWithFrame:frameRect];
     if (self) {
-        sockPath = path;
+        sockPath = strdup(path);
         [self registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
     }
     return self;
@@ -60,23 +88,27 @@ static void sendToGo(const char* msg, const char* sockPath) {
 
     NSMutableString *combinedPaths = [NSMutableString string];
     for (NSURL *url in urls) {
-        if ([combinedPaths length] > 0) {
-            [combinedPaths appendString:@"\n"];
-        }
+        if ([combinedPaths length] > 0) [combinedPaths appendString:@"\n"];
         [combinedPaths appendString:[url path]];
     }
 
     if ([combinedPaths length] > 0) {
-        sendToGo([combinedPaths UTF8String], sockPath);
+        sendToSocket([combinedPaths UTF8String], sockPath);
     }
-
     return YES;
+}
+
+- (void)dealloc {
+    free((void*)sockPath);
+    [super dealloc];
 }
 @end
 
+// ===== 4. Главный делегат =====
 @interface AppDelegate : NSObject <NSApplicationDelegate> {
     NSString* windowTitle;
     const char* sockPath;
+    WindowDelegate* windowDelegate;
 }
 - (void)setWindowTitle:(NSString*)title;
 - (NSString*)windowTitle;
@@ -85,7 +117,8 @@ static void sendToGo(const char* msg, const char* sockPath) {
 
 @implementation AppDelegate
 - (void)setWindowTitle:(NSString*)title {
-    windowTitle = title;
+    if (windowTitle) [windowTitle release];
+    windowTitle = [title retain];
 }
 
 - (NSString*)windowTitle {
@@ -93,16 +126,19 @@ static void sendToGo(const char* msg, const char* sockPath) {
 }
 
 - (void)setSocketPath:(const char*)path {
-    sockPath = path;
+    if (sockPath) free((void*)sockPath);
+    sockPath = strdup(path);
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
     NSWindow *window = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(0, 0, 100, 80)
+        initWithContentRect:NSMakeRect(0, 0, 130, 80)
                   styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
                     backing:NSBackingStoreBuffered
                       defer:NO];
 
+    windowDelegate = [[WindowDelegate alloc] initWithSocketPath:sockPath];
+    [window setDelegate:windowDelegate];
     window.level = NSFloatingWindowLevel;
     window.collectionBehavior = NSWindowCollectionBehaviorFullScreenNone;
     window.styleMask &= ~NSWindowStyleMaskResizable;
@@ -111,8 +147,10 @@ static void sendToGo(const char* msg, const char* sockPath) {
 
     DragView *dragView = [[DragView alloc] initWithFrame:window.contentView.bounds socketPath:sockPath];
     [window.contentView addSubview:dragView];
+    [dragView release];
 
-    [window setTitle:self.windowTitle ?: @"dr&Tags"];
+    // Исправленная строка - используем метод windowTitle вместо прямого доступа
+    [window setTitle:[self windowTitle] ?: @"dr&Tags"];
     [window center];
     [window makeKeyAndOrderFront:nil];
 }
@@ -120,8 +158,16 @@ static void sendToGo(const char* msg, const char* sockPath) {
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
     return YES;
 }
+
+- (void)dealloc {
+    if (windowTitle) [windowTitle release];
+    if (sockPath) free((void*)sockPath);
+    [windowDelegate release];
+    [super dealloc];
+}
 @end
 
+// ===== 5. Функция запуска =====
 void StartApp(const char* title, const char* sockPath) {
     [NSApplication sharedApplication];
     AppDelegate *delegate = [[AppDelegate alloc] init];
@@ -136,76 +182,76 @@ void StartApp(const char* title, const char* sockPath) {
 
     [NSApp setDelegate:delegate];
     [NSApp run];
+
+    [delegate release];
 }
-*/import "C"
+*/
+
+import "C"
 import (
-	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"syscall"
 	"unsafe"
+
+	"github.com/xlab/closer"
 )
 
 func unixSocketListener(sock string) {
-	sock, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	os.Remove(sock)
+
+	sockFd, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
-		fmt.Println("Socket error:", err)
+		log.Println("Socket error:", err)
 		return
 	}
-	defer syscall.Close(sock)
+	defer syscall.Close(sockFd)
 
 	addr := &syscall.SockaddrUnix{Name: sock}
-	if err := syscall.Bind(sock, addr); err != nil {
-		fmt.Println("Bind error:", err)
+	if err := syscall.Bind(sockFd, addr); err != nil {
+		log.Println("Bind error:", err)
 		return
 	}
 
-	if err := syscall.Listen(sock, 5); err != nil {
-		fmt.Println("Listen error:", err)
+	if err := syscall.Listen(sockFd, 5); err != nil {
+		log.Println("Listen error:", err)
 		return
 	}
 
-	fmt.Println("UNIX socket listener started")
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		os.Remove(sock)
-		os.Exit(0)
-	}()
+	// log.Println("UNIX socket listener started on", sock)
 
 	for {
-		fd, _, err := syscall.Accept(sock)
+		fd, _, err := syscall.Accept(sockFd)
 		if err != nil {
-			fmt.Println("Accept error:", err)
+			log.Println("Accept error:", err)
 			continue
 		}
 
 		buf := make([]byte, 102400)
 		n, err := syscall.Read(fd, buf)
+		syscall.Close(fd)
 		if err != nil {
-			fmt.Println("Read error:", err)
-			syscall.Close(fd)
+			log.Println("Read error:", err)
 			continue
+		}
+		if n == 0 {
+			closer.Close()
+			return
 		}
 
 		paths := string(buf[:n])
-		// fmt.Printf("Processing file: %s\n", path)
 		logPaths(paths)
-		syscall.Close(fd)
 	}
 }
 
 func showDroplet(title string) {
-	reg, err := os.CreateTemp("", drt+"*.sock")
+	reg, err := os.CreateTemp("", "drt*.sock")
 	if err != nil {
-		log.Println("~> sock", err)
+		log.Println("Failed to create temp socket:", err)
 		return
 	}
 	sock := reg.Name()
-	log.Println("~>", sock)
+	// log.Println("Using socket:", sock)
 	reg.Close()
 	os.Remove(sock)
 
@@ -213,11 +259,12 @@ func showDroplet(title string) {
 
 	cTitle := C.CString(title)
 	cSock := C.CString(sock)
-	defer func() {
+	closer.Bind(func() {
 		C.free(unsafe.Pointer(cTitle))
 		C.free(unsafe.Pointer(cSock))
 		os.Remove(sock)
-	}()
+	})
 
 	C.StartApp(cTitle, cSock)
+	// никогда
 }

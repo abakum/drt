@@ -293,10 +293,9 @@ end tell
 			log.Println("Одного дроплета достаточно", err)
 			return
 		}
-		defer cleanup()
+		closer.Bind(cleanup)
 
 		showDroplet(title)
-
 		return
 	}
 
@@ -856,7 +855,7 @@ func help() {
 	defer ctrlC()
 
 	if oldname == "" {
-		copy(nil, drt+dotLUA, DRS...) // Убираем lua
+		copyLUA(nil, drt+dotLUA, DRS...) // Убираем lua
 		// Убираем ffmpeg и ffprobe
 		for _, ff := range []string{ffmpeg, ffprobe} {
 			ff = filepath.Join(dir, ff+ext)
@@ -866,7 +865,7 @@ func help() {
 			}
 		}
 	} else {
-		copy(lua, drt+dotLUA, DRS...) // Копируем lua
+		copyLUA(lua, drt+dotLUA, DRS...) // Копируем lua
 		// Устанавливаем ffmpeg и ffprobe
 		for _, ff := range []string{ffmpeg, ffprobe} {
 			ff = ff + ext
@@ -1122,7 +1121,7 @@ func trimFrame(file, ext string) string {
 	return re.ReplaceAllString(file, "${2}")
 }
 
-func copy(srcFile []byte, base string, DRS ...string) (err error) {
+func copyLUA(srcFile []byte, base string, DRS ...string) (err error) {
 	for _, dir := range DRS {
 		dir := filepath.Join(dir, "Fusion", "Scripts", "Utility")
 		if _, err = os.Stat(dir); os.IsNotExist(err) {
