@@ -2,7 +2,6 @@ module github.com/abakum/drt
 
 go 1.22.0
 
-
 replace golang.org/x/term => golang.org/x/term v0.10.0
 
 replace golang.org/x/text => golang.org/x/text v0.20.0
@@ -62,6 +61,7 @@ require (
 	github.com/go-text/typesetting v0.2.1 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
+	github.com/gotk3/gotk3 v0.6.5-0.20240618185848-ff349ae13f56 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20241217141322-fcc2cadd6f08 // indirect
