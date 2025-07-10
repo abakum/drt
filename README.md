@@ -118,8 +118,8 @@ MovementName=2 Scherzo Allegro marcato
 
 # droplet
 
-- Кажется у нас с [ДуСей](https://chat.deepseek.com) получился [хороший](cmd/dnd) пример дроплета для `Linux`, `Windows` и `MacOS`. Особенно красивый в `Linux`.
-- Получился и [ЗДАРОВЫЙ](cmd/fdnd) пример дроплета для `Linux` и `Windows`.
+- Кажется у нас с [ДуСей](https://chat.deepseek.com) получился [хороший](https://github.com/abakum/droplet/tree/main/cmd/dnd) пример дроплета для `Linux`, `Windows` и `MacOS`. Особенно красивый в `Linux`.
+- Получился и [ЗДАРОВЫЙ](https://github.com/abakum/droplet/tree/main/cmd/fdnd) пример дроплета для `Linux` и `Windows`.
 - Дроплет запускается при отсутствии параметров например `drt` или через `drt.lnk`, `drTags.desktop`, `drTags.app`. Дроплет не запускается дважды. При каждом дропе откроется новое окно c `drt`.
 - В `MacOS` если нет параметров но выделены файлы в `Finder` вместо дроплета откроется новое окно `drt` для просмотра и редактирования тэгов файлов выделеных в `Finder`. 
 - Так на `MacOS` и без дроплета можно в консольном приложении делать типа `drag-n-drop`. 
