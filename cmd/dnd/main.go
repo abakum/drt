@@ -10,24 +10,26 @@ import (
 )
 
 const (
-	title   = "dr&Tags"
-	appName = "droplet"
-	dX      = 100
-	dY      = 80
+	title  = "dr&Tags"
+	drTags = "drTags"
+	dX     = 100
+	dY     = 80
 )
 
 func main() {
 	log.SetFlags(log.Lshortfile)
 
 	// Проверяем, не запущен ли дроплет
-	cleanup, err := initializeAppLock(appName)
+	cleanup, err := initializeAppLock(drTags)
 	if err != nil {
-		log.Fatalf("Application lock failed: %v", err)
+		log.Println("Одного дроплета достаточно", err)
+		return
 	}
 	defer cleanup()
 
-	onMain(title)
+	showDroplet(title)
 }
+
 func logPaths(paths string) {
 	fmt.Println(paths)
 	return

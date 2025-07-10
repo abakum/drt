@@ -20,7 +20,7 @@ import (
 	"github.com/rodrigocfd/windigo/win/co"
 )
 
-func onMain(title string) {
+func showDroplet(title string) {
 	runtime.LockOSThread() // Важно для однопоточного GUI Windows
 
 	// Создаем и запускаем окно

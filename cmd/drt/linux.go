@@ -1,11 +1,13 @@
+//go:build linux
+
 // Долго первый раз запрягает зато всего 5 мегабайт
+
 // sudo apt install libgtk-3-dev
 // go get github.com/gotk3/gotk3@master
 // https://github.com/gotk3/gotk3/issues/343
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -15,7 +17,7 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
-func main() {
+func showDroplet(title string) {
 	// Обработчик DnD для окна
 	handleDrop := func(
 		win *gtk.Window,
@@ -27,6 +29,7 @@ func main() {
 		// Получаем данные (URI-список)
 		uriList := string(data.GetData())
 
+		paths := []string{}
 		// Разбиваем строку на отдельные URI
 		for _, uri := range strings.Split(uriList, "\r\n") {
 			if uri == "" {
@@ -39,10 +42,11 @@ func main() {
 				log.Printf("Ошибка декодирования URI: %v", err)
 				continue
 			}
-
+			paths = append(paths, path)
 			// Выводим чистый путь
-			fmt.Println("Принят файл:", path)
+			// fmt.Println("Принят файл:", path)
 		}
+		logPaths(strings.Join(paths, "\n"))
 	}
 
 	// Инициализация GTK
@@ -53,10 +57,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	window.SetTitle("dr&Tags")
+	window.SetTitle(title)
 	window.Connect("destroy", gtk.MainQuit)
 	window.SetKeepAbove(true)
-	window.SetSizeRequest(100, 80)
+	window.SetSizeRequest(dX, dY)
 	window.SetResizable(false)
 	target, err := gtk.TargetEntryNew("text/uri-list", gtk.TARGET_OTHER_APP, 0)
 	if err != nil {

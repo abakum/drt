@@ -17,7 +17,7 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
-func onMain(title string) {
+func showDroplet(title string) {
 	// Обработчик DnD для окна
 	handleDrop := func(
 		win *gtk.Window,

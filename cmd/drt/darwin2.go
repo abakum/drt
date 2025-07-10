@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build ignore
 
 package main
 
@@ -128,8 +128,8 @@ void StartApp(const char* title) {
     [NSApp run];
 }
 */
+import "C"
 import (
-	"C"
 	"bytes"
 	"embed"
 	"fmt"
@@ -150,8 +150,9 @@ import (
 	"github.com/xlab/closer"
 )
 
-// Мы с ДуСей не осили калбэк на Go вызываемый из C
-func unixSocketListener(sock string) {
+func unixSocketListener() {
+	os.Remove("/tmp/dragdrop.sock")
+
 	sock, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
 		fmt.Println("Socket error:", err)
@@ -159,7 +160,7 @@ func unixSocketListener(sock string) {
 	}
 	defer syscall.Close(sock)
 
-	addr := &syscall.SockaddrUnix{Name: sock}
+	addr := &syscall.SockaddrUnix{Name: "/tmp/dragdrop.sock"}
 	if err := syscall.Bind(sock, addr); err != nil {
 		fmt.Println("Bind error:", err)
 		return
@@ -176,7 +177,7 @@ func unixSocketListener(sock string) {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		os.Remove(sock)
+		os.Remove("/tmp/dragdrop.sock")
 		os.Exit(0)
 	}()
 
@@ -203,27 +204,12 @@ func unixSocketListener(sock string) {
 }
 
 func showDroplet(title string) {
-	reg, err := os.CreateTemp("", drt+"*.sock")
-	if err != nil {
-		log.Println("~> sock", err)
-		return
-	}
-	sock := reg.Name()
-	log.Println("~>", sock)
-	reg.Close()
-	os.Remove(sock)
-
-	go unixSocketListener(sock)
+	go unixSocketListener()
 
 	cTitle := C.CString(title)
-	cSock := C.CString(sock)
-	defer func() {
-		C.free(unsafe.Pointer(cTitle))
-		C.free(unsafe.Pointer(cSock))
-		os.Remove(sock)
-	}()
+	defer C.free(unsafe.Pointer(cTitle))
 
-	C.StartApp(cTitle, cSock)
+	C.StartApp(cTitle)
 }
 
 const (

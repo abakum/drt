@@ -89,7 +89,7 @@ static void sendToGo(const char* msg) {
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
     NSWindow *window = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(0, 0, 100, 80)
+        initWithContentRect:NSMakeRect(0, 0, 160, 80)
                   styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
                     backing:NSBackingStoreBuffered
                       defer:NO];
@@ -131,15 +131,14 @@ void StartApp(const char* title) {
 import "C"
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"unsafe"
 )
 
-func unixSocketListener() {
-	os.Remove("/tmp/dragdrop.sock")
-
+func unixSocketListener(sock string) {
 	sock, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
 		fmt.Println("Socket error:", err)
@@ -147,7 +146,7 @@ func unixSocketListener() {
 	}
 	defer syscall.Close(sock)
 
-	addr := &syscall.SockaddrUnix{Name: "/tmp/dragdrop.sock"}
+	addr := &syscall.SockaddrUnix{Name: sock}
 	if err := syscall.Bind(sock, addr); err != nil {
 		fmt.Println("Bind error:", err)
 		return
@@ -164,7 +163,7 @@ func unixSocketListener() {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		os.Remove("/tmp/dragdrop.sock")
+		os.Remove(sock)
 		os.Exit(0)
 	}()
 
@@ -190,11 +189,26 @@ func unixSocketListener() {
 	}
 }
 
-func onMain(title string) {
-	go unixSocketListener()
+func showDroplet(title string) {
+	reg, err := os.CreateTemp("", drt+"*.sock")
+	if err != nil {
+		log.Println("~> sock", err)
+		return
+	}
+	sock := reg.Name()
+	log.Println("~>", sock)
+	reg.Close()
+	os.Remove(sock)
+
+	go unixSocketListener(sock)
 
 	cTitle := C.CString(title)
-	defer C.free(unsafe.Pointer(cTitle))
+	cSock := C.CString(sock)
+	defer func() {
+		C.free(unsafe.Pointer(cTitle))
+		C.free(unsafe.Pointer(cSock))
+		os.Remove(sock)
+	}()
 
-	C.StartApp(cTitle)
+	C.StartApp(cTitle, cSock)
 }
