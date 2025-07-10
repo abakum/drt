@@ -1,5 +1,7 @@
 //go:build darwin
 
+//go: cgo
+
 package main
 
 /*

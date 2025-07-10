@@ -1,5 +1,4 @@
 //go:build darwin
-// +build darwin
 
 package main
 
@@ -149,7 +148,6 @@ static void sendToSocket(const char* msg, const char* sockPath) {
     [window.contentView addSubview:dragView];
     [dragView release];
 
-    // Исправленная строка - используем метод windowTitle вместо прямого доступа
     [window setTitle:[self windowTitle] ?: @"dr&Tags"];
     [window center];
     [window makeKeyAndOrderFront:nil];
@@ -186,7 +184,6 @@ void StartApp(const char* title, const char* sockPath) {
     [delegate release];
 }
 */
-
 import "C"
 import (
 	"log"
@@ -218,8 +215,6 @@ func unixSocketListener(sock string) {
 		return
 	}
 
-	// log.Println("UNIX socket listener started on", sock)
-
 	for {
 		fd, _, err := syscall.Accept(sockFd)
 		if err != nil {
@@ -230,10 +225,12 @@ func unixSocketListener(sock string) {
 		buf := make([]byte, 102400)
 		n, err := syscall.Read(fd, buf)
 		syscall.Close(fd)
+
 		if err != nil {
 			log.Println("Read error:", err)
 			continue
 		}
+
 		if n == 0 {
 			closer.Close()
 			return

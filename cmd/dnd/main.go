@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/xlab/closer"
 )
 
 const (
@@ -25,7 +27,7 @@ func main() {
 		log.Println("Одного дроплета достаточно", err)
 		return
 	}
-	defer cleanup()
+	closer.Bind(cleanup)
 
 	showDroplet(title)
 }
