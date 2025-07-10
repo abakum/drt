@@ -14,14 +14,14 @@ package main
 #include <stdlib.h>
 #include <string.h>
 
-static void sendToGo(const char* msg) {
+static void sendToGo(const char* msg, const char* sockPath) {
     int clientSock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (clientSock == -1) return;
 
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, "/tmp/dragdrop.sock", sizeof(addr.sun_path)-1);
+    strncpy(addr.sun_path, sockPath, sizeof(addr.sun_path)-1);
 
     if (connect(clientSock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
         close(clientSock);
@@ -33,12 +33,17 @@ static void sendToGo(const char* msg) {
 }
 
 @interface DragView : NSView <NSDraggingDestination>
+{
+    const char* sockPath;
+}
+- (instancetype)initWithFrame:(NSRect)frameRect socketPath:(const char*)path;
 @end
 
 @implementation DragView
-- (instancetype)initWithFrame:(NSRect)frameRect {
+- (instancetype)initWithFrame:(NSRect)frameRect socketPath:(const char*)path {
     self = [super initWithFrame:frameRect];
     if (self) {
+        sockPath = path;
         [self registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
     }
     return self;
@@ -53,7 +58,6 @@ static void sendToGo(const char* msg) {
     NSArray *urls = [pboard readObjectsForClasses:@[[NSURL class]]
                                         options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
 
-    // Собираем все пути в одну строку с разделителем \n
     NSMutableString *combinedPaths = [NSMutableString string];
     for (NSURL *url in urls) {
         if ([combinedPaths length] > 0) {
@@ -62,9 +66,8 @@ static void sendToGo(const char* msg) {
         [combinedPaths appendString:[url path]];
     }
 
-    // Отправляем все пути одной строкой
     if ([combinedPaths length] > 0) {
-        sendToGo([combinedPaths UTF8String]);
+        sendToGo([combinedPaths UTF8String], sockPath);
     }
 
     return YES;
@@ -73,9 +76,11 @@ static void sendToGo(const char* msg) {
 
 @interface AppDelegate : NSObject <NSApplicationDelegate> {
     NSString* windowTitle;
+    const char* sockPath;
 }
 - (void)setWindowTitle:(NSString*)title;
 - (NSString*)windowTitle;
+- (void)setSocketPath:(const char*)path;
 @end
 
 @implementation AppDelegate
@@ -87,25 +92,26 @@ static void sendToGo(const char* msg) {
     return windowTitle;
 }
 
+- (void)setSocketPath:(const char*)path {
+    sockPath = path;
+}
+
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
     NSWindow *window = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(0, 0, 160, 80)
+        initWithContentRect:NSMakeRect(0, 0, 100, 80)
                   styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
                     backing:NSBackingStoreBuffered
                       defer:NO];
 
-    // Настройки окна
     window.level = NSFloatingWindowLevel;
     window.collectionBehavior = NSWindowCollectionBehaviorFullScreenNone;
     window.styleMask &= ~NSWindowStyleMaskResizable;
 
-    // Отключаем Dock-иконку
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 
-    DragView *dragView = [[DragView alloc] initWithFrame:window.contentView.bounds];
+    DragView *dragView = [[DragView alloc] initWithFrame:window.contentView.bounds socketPath:sockPath];
     [window.contentView addSubview:dragView];
 
-    // Используем переданный заголовок или значение по умолчанию
     [window setTitle:self.windowTitle ?: @"dr&Tags"];
     [window center];
     [window makeKeyAndOrderFront:nil];
@@ -116,7 +122,7 @@ static void sendToGo(const char* msg) {
 }
 @end
 
-void StartApp(const char* title) {
+void StartApp(const char* title, const char* sockPath) {
     [NSApplication sharedApplication];
     AppDelegate *delegate = [[AppDelegate alloc] init];
 
@@ -124,11 +130,14 @@ void StartApp(const char* title) {
         [delegate setWindowTitle:[NSString stringWithUTF8String:title]];
     }
 
+    if (sockPath != NULL) {
+        [delegate setSocketPath:sockPath];
+    }
+
     [NSApp setDelegate:delegate];
     [NSApp run];
 }
-*/
-import "C"
+*/import "C"
 import (
 	"fmt"
 	"log"
