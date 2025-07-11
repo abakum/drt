@@ -1,7 +1,5 @@
 //go:build darwin
 
-//go: cgo
-
 package main
 
 /*
@@ -187,7 +185,6 @@ void StartApp(const char* title, const char* sockPath) {
     [delegate release];
 }
 */
-
 import "C"
 import (
 	"bytes"
