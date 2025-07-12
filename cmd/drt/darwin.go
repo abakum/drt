@@ -186,6 +186,46 @@ void StartApp(const char* title, const char* sockPath) {
 }
 */
 import "C"
+
+/*
+// ===== 5. Функция запуска =====
+void StartApp(const char* title, const char* sockPath) {
+    [NSApplication sharedApplication];
+
+    // Важно: Устанавливаем политику ДО создания окон
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+
+    AppDelegate *delegate = [[AppDelegate alloc] init];
+    [delegate setWindowTitle:[NSString stringWithUTF8String:title ?: ""]];
+    [delegate setSocketPath:sockPath];
+
+    [NSApp setDelegate:delegate];
+    [NSApp activateIgnoringOtherApps:YES]; // Принудительная активация
+    [NSApp run];
+}
+*/
+
+/*
+// ===== 5. Функция запуска =====
+void StartApp(const char* title, const char* sockPath) {
+    [NSApplication sharedApplication];
+    AppDelegate *delegate = [[AppDelegate alloc] init];
+
+    if (title != NULL) {
+        [delegate setWindowTitle:[NSString stringWithUTF8String:title]];
+    }
+
+    if (sockPath != NULL) {
+        [delegate setSocketPath:sockPath];
+    }
+
+    [NSApp setDelegate:delegate];
+    [NSApp run];
+
+    [delegate release];
+}
+*/
+
 import (
 	"bytes"
 	"embed"
@@ -248,7 +288,7 @@ func unixSocketListener(sock string) {
 		}
 
 		paths := string(buf[:n])
-		logPaths(paths)
+		dropPaths(paths)
 	}
 }
 
@@ -271,6 +311,7 @@ func showDroplet(title string) {
 		C.free(unsafe.Pointer(cTitle))
 		C.free(unsafe.Pointer(cSock))
 		os.Remove(sock)
+		// выход тут
 	})
 
 	C.StartApp(cTitle, cSock)
@@ -308,28 +349,64 @@ var (
 		filepath.Join(xdg.DataHome, "Blackmagic Design", "DaVinci Resolve"),
 		filepath.Join(xdg.DataDirs[0], "Blackmagic Design", "DaVinci Resolve"),
 	}
+	as   = `Display dialog "Установите drTags" buttons {"OK"}'`
+	asOk bool
+	once bool
 )
 
 func onMain() {
+	var files []string
+	if len(os.Args) > 1 {
+		files = os.Args[1:]
+	} else {
+		finder = getSelectedFiles()
+		files = finder[:]
+	}
 	if strings.ToLower(args0) != droplet {
 		return
 	}
-	MacOS := filepath.Dir(os.Args[0])
-	Contents := filepath.Dir(MacOS)
-	scriptName := filepath.Join(Contents, Resources, applescript)
-	script, err := os.ReadFile(scriptName)
-	if err == nil {
-		cmd := exec.Command("osascript", "-e", string(script))
-		// log.Println(string(script))
-		output, err := cmd.CombinedOutput()
-		log.Println(cmd, err)
-		if err != nil {
-			log.Println(string(output))
+
+	// log.Println(files)
+	if !once {
+		once = true
+		MacOS := filepath.Dir(os.Args[0])
+		Contents := filepath.Dir(MacOS)
+		scriptName := filepath.Join(Contents, Resources, applescript)
+		script, err := os.ReadFile(scriptName)
+		if err == nil {
+			as = string(script)
+			asOk = true
+		}
+	}
+	if len(files) == 0 {
+		exec.Command("osascript", "-e", "beep").Start()
+		cleanup, err := initializeAppLock(drTags)
+		if err == nil {
+			closer.Bind(cleanup)
+			showDroplet(title)
 		}
 	} else {
-		log.Println("<~", scriptName, err)
+		dropPaths(strings.Join(files, "\n"))
 	}
 	closer.Close()
+}
+
+func dropPaths(paths string) {
+	files := strings.Split(paths, "\n")
+	if len(files) == 0 {
+		return
+	}
+	opts := []string{"-e", as}
+	if asOk {
+		opts = append(opts, files...)
+	}
+	cmd := exec.Command("osascript", opts...)
+	output, err := cmd.CombinedOutput()
+	// log.Println(cmd, err)
+	if err != nil {
+		log.Println(string(output))
+		log.Println(err)
+	}
 }
 
 // https://github.com/RichardBronosky/AppleScript-droplet
@@ -339,9 +416,9 @@ func install(oldname string, lnks ...string) {
 	servicePath := filepath.Join(filepath.Dir(xdg.DataHome), "Services", drTags+".workflow") // dir
 	if oldname == "" {
 		//uninstall
-		log.Println(adr, "~> /dev/null", os.RemoveAll(adr))
-		log.Println(servicePath, "~> /dev/null", os.RemoveAll(servicePath))
-		log.Println(link, "~> /dev/null", os.Remove(link))
+		log.Println(adr, "~> nul", os.RemoveAll(adr))
+		log.Println(servicePath, "~> nul", os.RemoveAll(servicePath))
+		log.Println(link, "~> nul", os.Remove(link))
 		return
 	}
 	ln(oldname, link, true, false)
@@ -352,8 +429,8 @@ func install(oldname string, lnks ...string) {
 	// Грязные параметры для fn
 	_, err := exec.LookPath(drTags)
 	replace := err != nil
-	dest := filepath.Dir(servicePath)
-	efs := workflow
+	dest := filepath.Dir(adr)
+	efs := app
 
 	// Walk through the embedded directory and copy files/dirs.
 	fn := func(path string, d fs.DirEntry, err error) error {
@@ -417,17 +494,17 @@ func install(oldname string, lnks ...string) {
 	}
 
 	fs.WalkDir(efs, ".", fn)
-	pbs(servicePath, string(script))
-
-	dest = filepath.Dir(adr)
-	efs = app
-	fs.WalkDir(efs, ".", fn)
 	Contents := filepath.Join(adr, "Contents")
 	MacOS := filepath.Join(Contents, "MacOS")
 	drtlet := filepath.Join(MacOS, droplet)
 	os.MkdirAll(MacOS, 0755)
 	ln(oldname, drtlet, true, false)
 	log.Println("chmod +x", drtlet, os.Chmod(drtlet, 0755))
+
+	dest = filepath.Dir(servicePath)
+	efs = workflow
+	fs.WalkDir(efs, ".", fn)
+	pbs(servicePath, string(script))
 
 }
 
@@ -497,6 +574,7 @@ func pbs(servicePath, workflowScript string) {
 	cmd.Wait()
 }
 
+// osascript  ~/Library/Services/drTags.workflow/Contents/Resources/main.applescript '/Users/koka/Downloads/20200307 Конкурс Варшавской 03 Метнер Две сказки часть 1.mp4'
 // tell application "Finder"
 //     activate
 //     -- Снимаем выделение во всех окнах
@@ -504,5 +582,3 @@ func pbs(servicePath, workflowScript string) {
 //         set selection of win to {}
 //     end repeat
 // end tell
-
-//osascript -e 'on run {input, parameters} ... end run' "/path/to/file1" "/path/to/file2"

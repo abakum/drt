@@ -47,10 +47,10 @@ func checkProcessExists(pid int) bool {
 func cleanupLock(lockFile *os.File) {
 	if lockFile != nil {
 		err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
-		log.Println(lockFile.Name(), "unLock", err)
+		if err != nil {
+			log.Println(lockFile.Name(), "unLock", err)
+		}
 		lockFile.Close()
 		os.Remove(lockFile.Name())
-	} else {
-		log.Println("lockFile is nil")
 	}
 }

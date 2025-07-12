@@ -114,7 +114,8 @@ var (
 		}
 		return v.(string), o
 	}
-	gui = strings.ToLower(args0) != drt
+	gui    = strings.ToLower(args0) != drt
+	finder []string
 )
 
 var _ = version.Ver
@@ -260,6 +261,8 @@ end tell
 		default:
 			args = os.Args[1:]
 		}
+	case len(finder) > 0:
+		args = finder[:]
 	}
 	//---------------------------------------------------------------------------
 	dirs := []string{}
@@ -287,6 +290,7 @@ end tell
 	}
 	paths := mapKeys("*", false)
 	if len(paths) == 0 {
+		fmt.Print("\a")
 		// log.Println("droplet")
 		cleanup, err := initializeAppLock(drTags)
 		if err != nil {
@@ -905,11 +909,11 @@ func help() {
 			log.Println(cmd.Args, err)
 			if err != nil {
 				// Выстрел в голову
-				log.Println(desktop, "~> /dev/null", os.Remove(desktop))
+				log.Println(desktop, "~> nul", os.Remove(desktop))
 			}
 
 			for _, lnk := range []string{adr, link, sh} {
-				log.Println(lnk, "~> /dev/null", os.Remove(lnk)) // Удаляем ссылки
+				log.Println(lnk, "~> nul", os.Remove(lnk)) // Удаляем ссылки
 			}
 
 			// Обновляем меню Открыть с помощью
@@ -1191,8 +1195,4 @@ func initializeAppLock(appName string) (func(), error) {
 
 func logPaths(paths string) {
 	fmt.Println(paths)
-	return
-	for _, path := range strings.Split(paths, "\n") {
-		fmt.Println(path)
-	}
 }
