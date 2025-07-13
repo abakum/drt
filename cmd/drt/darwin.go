@@ -362,7 +362,7 @@ func onMain() {
 		files = getSelectedFiles()
 		if len(files) > 0 {
 			for _, file := range files {
-				log.Println(file)
+				// log.Println(file)
 				if strings.Contains(file, "/Applications/") {
 					continue
 				}
