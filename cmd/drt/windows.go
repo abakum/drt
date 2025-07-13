@@ -519,24 +519,6 @@ func dropPaths(paths string) {
 	log.Println(qPaths(cmd.Args...), err)
 }
 
-// Проверяет, заключен ли путь в кавычки
-func isAlreadyQuoted(path string) bool {
-	return len(path) > 1 && path[0] == '"' && path[len(path)-1] == '"'
-}
-
-func qPaths(paths ...string) []string {
-	quoted := make([]string, len(paths))
-	for i, path := range paths {
-		if (strings.ContainsAny(path, " \t&()[]{}^=;!'+,`~") ||
-			strings.Contains(path, "%")) && !isAlreadyQuoted(path) {
-			quoted[i] = `"` + path + `"`
-		} else {
-			quoted[i] = path
-		}
-	}
-	return quoted
-}
-
 // cmd = exec.Command("cmd", "/c", "start", "/b", bin, opt)
 func createNewConsole(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{

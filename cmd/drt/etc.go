@@ -43,7 +43,7 @@ func install(oldname string, lnks ...string) {
 		log.Println("Меню для nautilus", sh,
 			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/usr/bin/env bash
 
-x-terminal-emulator -T %s -e %s`, ex, drTags)), 0744))
+x-terminal-emulator -T %s -e %s`, drTags, ex)), 0744))
 	}
 	deskTop(desktop, ex)
 	cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+applications) //

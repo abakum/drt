@@ -69,6 +69,8 @@ const (
 	dotLUA  = ".lua"
 	prompt  = `Пустая строка подтверждает ввод, ^С прерывает ввод.
 Введи "имя файла" или drag-n-drop или тэг=значение`
+	NAUTILUS_SCRIPT_SELECTED_FILE_PATHS = "NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"
+	xTerminalEmulator                   = "x-terminal-emulator"
 )
 
 var (
@@ -236,7 +238,7 @@ end tell
 	dir = filepath.Dir(exe)
 	ext = filepath.Ext(exe)
 
-	nautilus := os.Getenv("NAUTILUS_SCRIPT_SELECTED_FILE_PATHS")
+	nautilus := os.Getenv(NAUTILUS_SCRIPT_SELECTED_FILE_PATHS)
 	nautilus = strings.TrimSpace(nautilus)
 
 	var args []string
@@ -1186,4 +1188,22 @@ func initializeAppLock(appName string) (func(), error) {
 	return func() {
 		cleanupLock(lockFile)
 	}, nil
+}
+
+// Проверяет, заключен ли путь в кавычки
+func isAlreadyQuoted(path string) bool {
+	return len(path) > 1 && path[0] == '"' && path[len(path)-1] == '"'
+}
+
+func qPaths(paths ...string) []string {
+	quoted := make([]string, len(paths))
+	for i, path := range paths {
+		if (strings.ContainsAny(path, " \t&()[]{}^=;!'+,`~") ||
+			strings.Contains(path, "%")) && !isAlreadyQuoted(path) {
+			quoted[i] = `"` + path + `"`
+		} else {
+			quoted[i] = path
+		}
+	}
+	return quoted
 }
