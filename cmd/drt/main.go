@@ -287,8 +287,7 @@ end tell
 		etc = args[lenFD:]
 		argsTags = strings.Contains(strings.Join(etc, " "), "=")
 	}
-	paths := mapKeys("*", false)
-	if len(paths) == 0 {
+	if lenFD == 0 {
 		fmt.Print("\a")
 		// log.Println("droplet")
 		cleanup, err := initializeAppLock(drTags)
