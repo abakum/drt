@@ -162,7 +162,7 @@ func main() {
 		if darwin && gui {
 			// Когда прерываем проограмму по Ctrl-C терминал не закрывает окно.
 			// Когда закрыто последнее окно терминал не закрывается.
-			exec.Command("osascript", "-e", `
+			exec.CommandContext(ctx, "osascript", "-e", `
 tell application "Terminal"
 	repeat with w in windows
 		repeat with t in tabs of w

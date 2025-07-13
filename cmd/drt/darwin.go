@@ -379,7 +379,7 @@ func onMain() {
 		}
 	}
 	if len(files) == 0 {
-		exec.Command("osascript", "-e", "beep").Start()
+		exec.CommandContext(ctx, "osascript", "-e", "beep").Start()
 		cleanup, err := initializeAppLock(drTags)
 		if err == nil {
 			closer.Bind(cleanup)
@@ -400,7 +400,7 @@ func dropPaths(paths string) {
 	if asOk {
 		opts = append(opts, files...)
 	}
-	cmd := exec.Command("osascript", opts...)
+	cmd := exec.CommandContext(ctx, "osascript", opts...)
 	output, err := cmd.CombinedOutput()
 	// log.Println(cmd, err)
 	if err != nil {
@@ -565,7 +565,7 @@ func pbs(servicePath, workflowScript string) {
 	}
 
 	// Обновляем сервисы
-	cmd := exec.Command("/System/Library/CoreServices/pbs", "-flush")
+	cmd := exec.CommandContext(ctx, "/System/Library/CoreServices/pbs", "-flush")
 	err = cmd.Start()
 	log.Println(cmd, err)
 	if err != nil {

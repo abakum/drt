@@ -386,7 +386,8 @@ func (ddw *DragDropWindow) setupEventHandlers() {
 		defer hDrop.DragFinish() // Важно: освобождаем ресурсы
 
 		if files, err := hDrop.DragQueryFile(); err == nil {
-			logPaths(strings.Join(files, "\n"))
+			// logPaths(strings.Join(files, "\n"))
+			dropPaths(strings.Join(files, "\n"))
 			// Показываем уведомление (первые 10 файла)
 			// displayFiles := files
 			// if len(files) > 10 {
@@ -473,5 +474,25 @@ func cleanupLock(lockFile *os.File) {
 	if lockFile != nil {
 		lockFile.Close()
 		os.Remove(lockFile.Name())
+	}
+}
+
+func dropPaths(paths string) {
+	opts := strings.Split(paths, "\n")
+	if len(opts) == 0 {
+		return
+	}
+	cmd := exec.CommandContext(ctx, "drt", opts...)
+	createNewConsole(cmd)
+	err := cmd.Start()
+	log.Println(cmd, err)
+}
+
+// cmd = exec.Command("cmd", "/c", "start", "/b", bin, opt)
+func createNewConsole(cmd *exec.Cmd) {
+	const CREATE_NEW_CONSOLE = 0x10
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags:    CREATE_NEW_CONSOLE,
+		NoInheritHandles: true,
 	}
 }
