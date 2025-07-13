@@ -77,8 +77,8 @@ var (
 	ctx      context.Context
 	cncl     context.CancelFunc
 	argsTags bool // Тэги в командной строке
-	win      = runtime.GOOS == "windows"
-	darwin   = runtime.GOOS == "darwin"
+	// win      = runtime.GOOS == "windows"
+	darwin = runtime.GOOS == "darwin"
 	// a/b.c
 	args0 = trimExt(filepath.Base(os.Args[0]))
 	// b.c
@@ -114,7 +114,6 @@ var (
 		}
 		return v.(string), o
 	}
-	gui    = strings.ToLower(args0) != drt
 	finder []string
 )
 
@@ -153,13 +152,12 @@ func main() {
 	}
 	wd, _ := os.Getwd()
 	log.Println(exe, VERSION, wd, os.Args[0])
-	onMain()
 
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()
 	closer.Bind(cncl)
 	closer.Bind(func() {
-		if darwin && gui {
+		if darwin && isGUI() {
 			// Когда прерываем проограмму по Ctrl-C терминал не закрывает окно.
 			// Когда закрыто последнее окно терминал не закрывается.
 			exec.CommandContext(ctx, "osascript", "-e", `
@@ -181,6 +179,7 @@ end tell
 `).Start()
 		}
 	})
+	onMain()
 	// ctx, cncl = signal.NotifyContext(context.Background(), closer.DefaultSignalSet...)
 	// defer cncl()
 
@@ -943,10 +942,7 @@ func yes(s string) (ok bool) {
 }
 
 func ctrlC() {
-	if win {
-		gui = !strings.HasPrefix(os.Environ()[0], "=")
-	}
-	if !gui {
+	if !isGUI() {
 		return
 	}
 	log.Println("Жми ^C")
@@ -1172,7 +1168,7 @@ func initializeAppLock(appName string) (func(), error) {
 		}
 
 		if checkProcessExists(pid) {
-			return nil, fmt.Errorf("application already running (PID %d)", pid)
+			return nil, fmt.Errorf("%s (PID %d)", filename, pid)
 		}
 
 		// Удаляем устаревший lock-файл
@@ -1191,8 +1187,4 @@ func initializeAppLock(appName string) (func(), error) {
 	return func() {
 		cleanupLock(lockFile)
 	}, nil
-}
-
-func logPaths(paths string) {
-	fmt.Println(paths)
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"syscall"
 )
 
@@ -53,4 +54,8 @@ func cleanupLock(lockFile *os.File) {
 		lockFile.Close()
 		os.Remove(lockFile.Name())
 	}
+}
+
+func isGUI() bool {
+	return strings.ToLower(args0) != drt
 }

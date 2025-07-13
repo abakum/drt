@@ -13,7 +13,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/adrg/xdg"
 	"github.com/jxeng/shortcut"
@@ -37,6 +36,35 @@ var (
 		filepath.Join(xdg.DataDirs[1], "Blackmagic Design", "DaVinci Resolve"),
 	}
 )
+var (
+	user32   = syscall.NewLazyDLL("user32.dll")
+	kernel32 = syscall.NewLazyDLL("kernel32.dll")
+
+	// Функции WinAPI
+	getConsoleWindow = kernel32.NewProc("GetConsoleWindow")
+	showWindow       = user32.NewProc("ShowWindow")
+	getLastError     = kernel32.NewProc("GetLastError")
+)
+
+func hideConsole() {
+	console, _, _ := getConsoleWindow.Call()
+	if console == 0 {
+		errCode, _, _ := getLastError.Call()
+		if errCode != 0 {
+			log.Printf("getConsoleWindow failed with error: %d\n", errCode)
+		}
+		return
+	}
+
+	// Пытаемся скрыть консоль
+	ret, _, _ := showWindow.Call(console, 0) // 0 = SW_HIDE
+	if ret == 0 {                            // Если ShowWindow вернул FALSE
+		errCode, _, _ := getLastError.Call()
+		if errCode != 0 {
+			log.Printf("ShowWindow failed with error: %d\n", errCode)
+		}
+	}
+}
 
 // Эта функция amAdmin() проверяет, запущена ли программа с правами администратора в Windows.
 func amAdmin() bool {
@@ -353,7 +381,14 @@ func SplitCommandLine(command string) ([]string, error) {
 func onMain() {
 
 }
+func isGUI() bool {
+	return !strings.HasPrefix(os.Environ()[0], "=")
+}
+
 func showDroplet(title string) {
+	if isGUI() {
+		hideConsole()
+	}
 	runtime.LockOSThread() // Важно для однопоточного GUI Windows
 
 	// Создаем и запускаем окно
@@ -403,13 +438,6 @@ func (ddw *DragDropWindow) setupEventHandlers() {
 	})
 }
 
-var (
-	kernel32        = syscall.NewLazyDLL("kernel32.dll")
-	procCreateMutex = kernel32.NewProc("CreateMutexW")
-	procOpenProcess = kernel32.NewProc("OpenProcess")
-	procCloseHandle = kernel32.NewProc("CloseHandle")
-)
-
 const (
 	PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 	ERROR_ALREADY_EXISTS              = 183
@@ -417,23 +445,19 @@ const (
 
 func createAppLock(appName string) (*os.File, error) {
 	// Создаем именованный мьютекс
-	mutexName, err := syscall.UTF16PtrFromString(fmt.Sprintf("Global\\%s", appName))
+	mutexName, err := windows.UTF16PtrFromString(fmt.Sprintf("Global\\%s", appName))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create mutex name: %v", err)
 	}
 
-	handle, _, err := procCreateMutex.Call(
-		0, // default security attributes
-		0, // initially not owned
-		uintptr(unsafe.Pointer(mutexName)),
-	)
+	handle, err := windows.CreateMutex(nil, false, mutexName)
 
 	if handle == 0 {
 		return nil, fmt.Errorf("failed to create mutex: %v", err)
 	}
 
 	// Проверяем, не существует ли уже мьютекс
-	if errno, ok := err.(syscall.Errno); ok && errno == ERROR_ALREADY_EXISTS {
+	if errno, ok := err.(syscall.Errno); ok && errno == windows.ERROR_ALREADY_EXISTS {
 		syscall.CloseHandle(syscall.Handle(handle))
 		return nil, fmt.Errorf("application already running")
 	}
@@ -458,16 +482,23 @@ func createAppLock(appName string) (*os.File, error) {
 }
 
 func checkProcessExists(pid int) bool {
-	handle, _, _ := procOpenProcess.Call(
-		uintptr(PROCESS_QUERY_LIMITED_INFORMATION),
-		uintptr(0),
-		uintptr(pid),
+	handle, _ := windows.OpenProcess(
+		windows.PROCESS_QUERY_INFORMATION,
+		false,
+		uint32(pid), // PID
 	)
 	if handle == 0 {
 		return false
 	}
-	procCloseHandle.Call(handle)
 	return true
+
+	const (
+		STILL_ACTIVE = 259
+	)
+	var exitCode uint32
+	err := windows.GetExitCodeProcess(handle, &exitCode)
+	windows.CloseHandle(handle)
+	return err != nil && exitCode == STILL_ACTIVE
 }
 
 func cleanupLock(lockFile *os.File) {
@@ -482,17 +513,34 @@ func dropPaths(paths string) {
 	if len(opts) == 0 {
 		return
 	}
-	cmd := exec.CommandContext(ctx, "drt", opts...)
+	cmd := exec.CommandContext(ctx, drt, opts...)
 	createNewConsole(cmd)
 	err := cmd.Start()
-	log.Println(cmd, err)
+	log.Println(qPaths(cmd.Args...), err)
+}
+
+// Проверяет, заключен ли путь в кавычки
+func isAlreadyQuoted(path string) bool {
+	return len(path) > 1 && path[0] == '"' && path[len(path)-1] == '"'
+}
+
+func qPaths(paths ...string) []string {
+	quoted := make([]string, len(paths))
+	for i, path := range paths {
+		if (strings.ContainsAny(path, " \t&()[]{}^=;!'+,`~") ||
+			strings.Contains(path, "%")) && !isAlreadyQuoted(path) {
+			quoted[i] = `"` + path + `"`
+		} else {
+			quoted[i] = path
+		}
+	}
+	return quoted
 }
 
 // cmd = exec.Command("cmd", "/c", "start", "/b", bin, opt)
 func createNewConsole(cmd *exec.Cmd) {
-	const CREATE_NEW_CONSOLE = 0x10
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags:    CREATE_NEW_CONSOLE,
+		CreationFlags:    windows.CREATE_NEW_CONSOLE,
 		NoInheritHandles: true,
 	}
 }
