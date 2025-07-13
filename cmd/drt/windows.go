@@ -513,7 +513,7 @@ func dropPaths(paths string) {
 	if len(opts) == 0 {
 		return
 	}
-	cmd := exec.CommandContext(ctx, drt, opts...)
+	cmd := exec.Command(drt, opts...)
 	createNewConsole(cmd)
 	err := cmd.Start()
 	log.Println(qPaths(cmd.Args...), err)

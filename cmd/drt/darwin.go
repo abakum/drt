@@ -359,8 +359,17 @@ func onMain() {
 	if len(os.Args) > 1 {
 		files = os.Args[1:]
 	} else {
-		finder = getSelectedFiles()
-		files = finder[:]
+		files = getSelectedFiles()
+		if len(files) > 0 {
+			for _, file := range files {
+				log.Println(file)
+				if strings.Contains(file, "/Applications/") {
+					continue
+				}
+				finder = append(finder, file)
+			}
+			files = finder[:]
+		}
 	}
 	if strings.ToLower(args0) != droplet {
 		return
@@ -379,7 +388,7 @@ func onMain() {
 		}
 	}
 	if len(files) == 0 {
-		exec.CommandContext(ctx, "osascript", "-e", "beep").Start()
+		exec.Command("osascript", "-e", "beep").Start()
 		cleanup, err := initializeAppLock(drTags)
 		if err == nil {
 			closer.Bind(cleanup)
@@ -400,7 +409,7 @@ func dropPaths(paths string) {
 	if asOk {
 		opts = append(opts, files...)
 	}
-	cmd := exec.CommandContext(ctx, "osascript", opts...)
+	cmd := exec.Command("osascript", opts...)
 	output, err := cmd.CombinedOutput()
 	// log.Println(cmd, err)
 	if err != nil {
@@ -565,7 +574,7 @@ func pbs(servicePath, workflowScript string) {
 	}
 
 	// Обновляем сервисы
-	cmd := exec.CommandContext(ctx, "/System/Library/CoreServices/pbs", "-flush")
+	cmd := exec.Command("/System/Library/CoreServices/pbs", "-flush")
 	err = cmd.Start()
 	log.Println(cmd, err)
 	if err != nil {

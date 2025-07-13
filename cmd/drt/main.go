@@ -152,6 +152,7 @@ func main() {
 	}
 	wd, _ := os.Getwd()
 	log.Println(exe, VERSION, wd, os.Args[0])
+	onMain()
 
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()
@@ -160,7 +161,7 @@ func main() {
 		if darwin && isGUI() {
 			// Когда прерываем проограмму по Ctrl-C терминал не закрывает окно.
 			// Когда закрыто последнее окно терминал не закрывается.
-			exec.CommandContext(ctx, "osascript", "-e", `
+			exec.Command("osascript", "-e", `
 tell application "Terminal"
 	repeat with w in windows
 		repeat with t in tabs of w
@@ -179,7 +180,6 @@ end tell
 `).Start()
 		}
 	})
-	onMain()
 	// ctx, cncl = signal.NotifyContext(context.Background(), closer.DefaultSignalSet...)
 	// defer cncl()
 
