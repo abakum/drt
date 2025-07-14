@@ -292,447 +292,273 @@ end tell
 		etc = args[lenFD:]
 		argsTags = strings.Contains(strings.Join(etc, " "), "=")
 	}
-	if lenFD == 0 {
-		fmt.Print("\a")
-		cleanup, err := initializeAppLock(drTags)
-		if err != nil {
-			log.Println("Одного дроплета достаточно", err)
-		} else {
-			closer.Bind(cleanup)
-			go showDroplet(title)
-		}
-	}
 
-	for _, file := range mapKeys("*", false) {
-		// Только источники
-		att, _ := sourcesL(file)
-		if att == nil {
-			continue
-		}
-		out, album, ext, title := oaet(file)
-		if ext == dotCSV {
-			if argsTags || len(etc) > 0 || dash {
-				drCSV(album, out, file)
-			}
-			continue
-		}
-
-		att.album = album
-		att.title = title
-		att.audio, _ = probe(filepath.Dir(file), filepath.Base(file), false)
-		swrpp(file, att, nil)
-
-		if argsTags {
-			att.tags.set("Меняю", newTags(etc...))
-			att.tags.write(file)
-			readTags(file).print(2, file, false)
-		}
-	}
-	if argsTags || len(etc) > 0 || dash {
-		// drt file tag=
-		// drt file foo
-		// drt -
-		return
-	}
-	// drt file
-	watcher, err = fsnotify.NewWatcher()
-	log.Println("Начал слежку", err)
-	if err == nil {
-		defer watcher.Close()
-
-		isEmpty := make(chan string, 1000)
-		notEmpty := make(chan string, 1000)
-		remove := make(chan string, 1000)
-
-		go func() {
-			// isEmpty
-
-			// Список проверяемых файлов
-			var (
-				files  sync.Map
-				filesR = func(f func(file string, empty bool) bool) {
-					files.Range(func(key, value any) bool {
-						return f(key.(string), value.(bool))
-					})
-				}
-			)
-
-			t := time.NewTimer(time.Second)
-			defer t.Stop()
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case file, ok := <-remove:
-					if !ok {
-						return
-					}
-					files.Delete(file)
-					log.Println("Не жду", file)
-				case file, ok := <-isEmpty:
-					if !ok {
-						return
-					}
-					if _, ok := files.Load(file); ok {
-						// дубликаты
-						continue
-					}
-					if Ext(file) == dotWAV {
-						log.Println("DR пишет .wav файл так, что не понятно когда закончит.")
-						log.Println("Для автоматического ожидания используй вместо .wav файла файл .mov c аудио частью в pcm")
-						log.Println("Когда DR завершит запись .wav файла нажми <Enter>")
-						// Чтоб это сообщение появлялось не чаще раз в минуту
-						files.Store(file, false)
-						time.AfterFunc(time.Minute, func() { remove <- file })
-						continue
-					}
-					log.Println("Жду DR", file)
-					files.Store(file, true)
-					t.Reset(time.Second) // подождём твою маму
-				case <-t.C:
-					filesR(func(file string, empty bool) bool {
-						if !empty {
-							return true
-						}
-						if f, err := open(file); err == nil {
-							f.Close()
-							// Не пуст
-							l := flock.New(file)
-							ok, err := l.TryRLockContext(ctx, time.Second)
-							fmt.Print(".")
-							l.Close()
-							if err != nil || !ok {
-								t.Reset(time.Second) // подождём твою маму
-								return true
-							}
-							fmt.Println()
-							base := filepath.Base(file)
-							dir := filepath.Dir(file)
-							switch e := Ext(file); e {
-							case ".dpx", ".cin", ".tif", ".ppm", ".bmp", ".xpm":
-								jpg := trimFrame(base, e)
-								exported := base != jpg
-								jpg = trimExt(jpg) + dotJPG
-								args := []string{
-									"-hide_banner",
-									"-v", "error",
-									"-i", base,
-									"-q:v", "1", jpg,
-								}
-								rs, err := run(ctx, os.Stdout, "ffmpeg", dir, args...)
-								log.Println(base, "~>", jpg, err)
-								if err == nil && rs == 0 {
-									if exported {
-										// Удаляем только эксортированные
-										os.Remove(file)
-									}
-									file = filepath.Join(dir, jpg)
-								} else {
-									log.Println("Не удалось создать файл", jpg, err, "код завершения", rs)
-								}
-							case ".jpg", ".png", dotFLAC:
-								fileXXXXXXXX := file
-								file = trimFrame(file, e)
-								if file != fileXXXXXXXX {
-									err := os.Rename(fileXXXXXXXX, file)
-									log.Println(base, "~>", filepath.Base(file), err)
-									if err == nil {
-										files.Delete(fileXXXXXXXX)
-									} else {
-										file = fileXXXXXXXX
-									}
-								}
-							}
-							files.Store(file, false)
-							log.Println("Дождался", file)
-							notEmpty <- file
-
-							return true
-						}
-						t.Reset(time.Second) // подождём твою маму
-						return true
-					})
-				}
-			}
-		}()
-
-		go func() {
-			// notEmpty
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case file, ok := <-notEmpty:
-					if !ok {
-						return
-					}
-
-					fileCSV := ""
-					switch Ext(file) {
-					case dotCSV:
-						fileCSV = file
-					default:
-						if att, _ := sourcesL(file); att != nil {
-							fileCSV = att.parent
-						}
-						woe := trimExt(file)
-						if fileCSV == "" {
-							fileCSV, _ = futuresL(woe)
-						}
-						if fileCSV == "" {
-							continue
-						}
-
-						futures.Delete(woe)
-					}
-					// time.Sleep(time.Second)
-					log.Println("Обрабатываю", fileCSV)
-					sources.LoadOrStore(fileCSV, &ATT{})
-					out, album, _, _ := oaet(fileCSV)
-					drCSV(album, out, fileCSV)
-					remove <- file
-					doCSV(fileCSV)
-					fmt.Println(prompt)
-				}
-			}
-		}()
-
-		// Start listening for events.
-		go func() {
-			defer log.Println("Закончил слежку", watcher.WatchList())
-			for {
-				select {
-				case <-ctx.Done():
-					log.Println("Context Done")
-					return
-				case event, ok := <-watcher.Events:
-					if !ok {
-						log.Println("Events Done")
-						return
-					}
-					file := event.Name
-					// log.Println(event.Op.String(), file)
-					e := Ext(file)
-					if event.Has(fsnotify.Remove) {
-						log.Println("Пропал", file)
-						continue
-					}
-					// }
-					if event.Has(fsnotify.Create) {
-						log.Println("Появился", file)
-					} else if !event.Has(fsnotify.Write) {
-						continue
-					}
-					switch e {
-					case dotCSV, // Любой csv
-						".dpx", ".cin", ".tif", ".ppm", ".bmp", ".xpm", // Любая картинка для конвертации в .jpg Удаляю если с d8
-						".png", dotJPG: // Любая картинка для переименования с d8
-						isEmpty <- file
-					case dotFLAC:
-						file = trimFrame(file, dotFLAC)
-						fallthrough
-					default:
-						// Остальные если это результаты
-						fileCSV := ""
-						if att, _ := sourcesL(file); att != nil {
-							fileCSV = att.parent
-						}
-						// Или будущие результаты
-						if fileCSV == "" {
-							fileCSV, _ = futuresL(trimExt(file))
-						}
-						if fileCSV != "" {
-							// Но csv должен уже быть
-							if f, err := open(fileCSV); err == nil {
-								f.Close()
-								isEmpty <- event.Name
-							}
-						}
-					}
-				case err, ok := <-watcher.Errors:
-					if !ok {
-						log.Println("Errors Done")
-						return
-					}
-					log.Println("Ошибка слежки", err)
-				}
-			}
-		}()
-		for _, file := range dirs {
-			log.Println("Слежу за", file, watcher.Add(file))
-		}
-	}
-
-	const (
-		src = "Исходные медиафайлы------------------------------"
-		trg = "Результирующие медиафайлы------------------------"
-	)
-	log.Println(src)
-	for _, file := range mapKeys("*", false) {
-		out, album, ext, _ := oaet(file)
-		if ext == dotCSV {
-			drCSV(album, out, file)
-			continue
-		}
-		if att, _ := sourcesL(file); att != nil {
-			att.tags.print(2, file, true)
-		}
-	}
-
-	results := mapKeys("*", true)
-	if len(results) > 0 {
-		log.Println(trg)
-		for _, file := range results {
-			if att, _ := sourcesL(file); att != nil {
-				att.tags.print(2, file, true)
-			}
-		}
-	}
-
-	for {
-		printHT("*")
-		fmt.Println(prompt)
-
-		etc = nil
-		eof := false
-	scan:
-		for eof = true; in.Scan(); eof = true {
-			eof = false
-			s := strings.TrimSpace(in.Text())
-			if s == "" {
-				break
-			}
-			if !strings.Contains(s, `"`) && !strings.Contains(s, `'`) && !darwin {
-				// tags
-				etc = append(etc, s)
+	loop := func() {
+		for _, file := range mapKeys("*", false) {
+			// Только источники
+			att, _ := sourcesL(file)
+			if att == nil {
 				continue
 			}
-			if s == `""` || s == `''` {
-				log.Println("Очистил список исходных медиафайлов")
-				sources = *new(sync.Map)
+			out, album, ext, title := oaet(file)
+			if ext == dotCSV {
+				if argsTags || len(etc) > 0 || dash {
+					drCSV(album, out, file)
+				}
 				continue
 			}
-			// drag-n-drop?
-			files, err := SplitCommandLine(s)
-			if err != nil {
-				log.Println("drag-n-drop?", files, err)
-				continue
-			}
-			for _, file := range files {
-				f, err := open(file)
-				if err == nil {
-					f.Close()
-				} else if err.Error() != "isDir" {
-					if darwin {
-						etc = append(etc, s)
-						continue
-					}
-					log.Println("медиафайл?", file)
-					fmt.Println(prompt)
-					continue scan
-				}
-			}
-			log.Println("drag-n-drop", files)
-			// drag-n-drop
-			for _, file := range files {
-				file, err := filepath.Abs(file)
-				if err != nil {
-					continue
-				}
-				f, err := open(file)
-				if err == nil {
-					f.Close()
-					switch Ext(file) {
-					case dotCSV, dotMOV, dotMP4, dotFLAC, dotMP3:
-					default:
-						continue
-					}
 
-					if _, ok := sources.Load(file); !ok {
-						// Новые
-						out, album, ext, title := oaet(file)
-						att := &ATT{album, title, newTags(), false, "", ""}
-						sources.Store(file, att)
-						if ext == dotCSV {
-							drCSV(album, out, file)
-							doCSV(file)
-						} else {
-							att.audio, _ = probe(filepath.Dir(file), filepath.Base(file), false)
-							swrpp(file, att, nil)
-							printHT("*")
-						}
-					}
-				} else if err.Error() == "isDir" {
-					// dir
-					if watcher != nil {
-						err := watcher.Add(file)
-						if err != nil {
-							log.Println("Слежу за", file, err)
-						}
-					}
-				}
+			att.album = album
+			att.title = title
+			att.audio, _ = probe(filepath.Dir(file), filepath.Base(file), false)
+			swrpp(file, att, nil)
+
+			if argsTags {
+				att.tags.set("Меняю", newTags(etc...))
+				att.tags.write(file)
+				readTags(file).print(2, file, false)
 			}
-			if watcher != nil && len(watcher.WatchList()) > 0 {
-				log.Println("Слежу за", watcher.WatchList())
-			}
-			fmt.Println(prompt)
 		}
-		if in.Err() != nil || eof {
+		if argsTags || len(etc) > 0 || dash {
+			// drt file tag=
+			// drt file foo
+			// drt -
 			return
 		}
-		// Закончил ввод тэгов
-		tags := newTags(etc...)
-		if _, ok := tags["=="]; ok {
-			delete(tags, "==")
-			for _, file := range mapKeys("*", false) {
-				att, _ := sourcesL(file)
-				if att == nil {
-					continue
-				}
+		// drt file
+		watcher, err = fsnotify.NewWatcher()
+		log.Println("Начал слежку", err)
+		if err == nil {
+			defer watcher.Close()
 
-				a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
-				att.audio = a
-				swrpp(file, att, tags)
-				// добавляет в sources
-				if slices.Contains(probes, "format_name=mpegts") {
-					mov := file + dotMOV
-					if f, err := open(mov); err == nil {
-						f.Close()
-						sources.Store(mov, att)
-						sources.Delete(file)
-						file = mov
-						probe(filepath.Dir(file), filepath.Base(file), false)
-					} else {
-						args := []string{
-							"-hide_banner",
-							"-v", "error",
-							"-i", filepath.Base(file),
-							"-c", "copy", mov,
-						}
-						rs, err := run(ctx, os.Stdout, "ffmpeg", filepath.Dir(file), args...)
-						if err == nil && rs == 0 {
-							log.Println(file, "~>", mov)
-							sources.Store(mov, att)
-							sources.Delete(file)
-							file = mov
-							probe(filepath.Dir(file), filepath.Base(file), false)
-						} else {
-							log.Println("Не удалось создать файл", mov, err, "код завершения", rs)
-						}
+			isEmpty := make(chan string, 1000)
+			notEmpty := make(chan string, 1000)
+			remove := make(chan string, 1000)
+
+			go func() {
+				// isEmpty
+
+				// Список проверяемых файлов
+				var (
+					files  sync.Map
+					filesR = func(f func(file string, empty bool) bool) {
+						files.Range(func(key, value any) bool {
+							return f(key.(string), value.(bool))
+						})
 					}
-				} else {
-					att.tags.timeLine(att.album, filepath.Dir(file), file, a, "", probes...)
+				)
+
+				t := time.NewTimer(time.Second)
+				defer t.Stop()
+
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case file, ok := <-remove:
+						if !ok {
+							return
+						}
+						files.Delete(file)
+						log.Println("Не жду", file)
+					case file, ok := <-isEmpty:
+						if !ok {
+							return
+						}
+						if _, ok := files.Load(file); ok {
+							// дубликаты
+							continue
+						}
+						if Ext(file) == dotWAV {
+							log.Println("DR пишет .wav файл так, что не понятно когда закончит.")
+							log.Println("Для автоматического ожидания используй вместо .wav файла файл .mov c аудио частью в pcm")
+							log.Println("Когда DR завершит запись .wav файла нажми <Enter>")
+							// Чтоб это сообщение появлялось не чаще раз в минуту
+							files.Store(file, false)
+							time.AfterFunc(time.Minute, func() { remove <- file })
+							continue
+						}
+						log.Println("Жду DR", file)
+						files.Store(file, true)
+						t.Reset(time.Second) // подождём твою маму
+					case <-t.C:
+						filesR(func(file string, empty bool) bool {
+							if !empty {
+								return true
+							}
+							if f, err := open(file); err == nil {
+								f.Close()
+								// Не пуст
+								l := flock.New(file)
+								ok, err := l.TryRLockContext(ctx, time.Second)
+								fmt.Print(".")
+								l.Close()
+								if err != nil || !ok {
+									t.Reset(time.Second) // подождём твою маму
+									return true
+								}
+								fmt.Println()
+								base := filepath.Base(file)
+								dir := filepath.Dir(file)
+								switch e := Ext(file); e {
+								case ".dpx", ".cin", ".tif", ".ppm", ".bmp", ".xpm":
+									jpg := trimFrame(base, e)
+									exported := base != jpg
+									jpg = trimExt(jpg) + dotJPG
+									args := []string{
+										"-hide_banner",
+										"-v", "error",
+										"-i", base,
+										"-q:v", "1", jpg,
+									}
+									rs, err := run(ctx, os.Stdout, "ffmpeg", dir, args...)
+									log.Println(base, "~>", jpg, err)
+									if err == nil && rs == 0 {
+										if exported {
+											// Удаляем только эксортированные
+											os.Remove(file)
+										}
+										file = filepath.Join(dir, jpg)
+									} else {
+										log.Println("Не удалось создать файл", jpg, err, "код завершения", rs)
+									}
+								case ".jpg", ".png", dotFLAC:
+									fileXXXXXXXX := file
+									file = trimFrame(file, e)
+									if file != fileXXXXXXXX {
+										err := os.Rename(fileXXXXXXXX, file)
+										log.Println(base, "~>", filepath.Base(file), err)
+										if err == nil {
+											files.Delete(fileXXXXXXXX)
+										} else {
+											file = fileXXXXXXXX
+										}
+									}
+								}
+								files.Store(file, false)
+								log.Println("Дождался", file)
+								notEmpty <- file
+
+								return true
+							}
+							t.Reset(time.Second) // подождём твою маму
+							return true
+						})
+					}
 				}
+			}()
+
+			go func() {
+				// notEmpty
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case file, ok := <-notEmpty:
+						if !ok {
+							return
+						}
+
+						fileCSV := ""
+						switch Ext(file) {
+						case dotCSV:
+							fileCSV = file
+						default:
+							if att, _ := sourcesL(file); att != nil {
+								fileCSV = att.parent
+							}
+							woe := trimExt(file)
+							if fileCSV == "" {
+								fileCSV, _ = futuresL(woe)
+							}
+							if fileCSV == "" {
+								continue
+							}
+
+							futures.Delete(woe)
+						}
+						// time.Sleep(time.Second)
+						log.Println("Обрабатываю", fileCSV)
+						sources.LoadOrStore(fileCSV, &ATT{})
+						out, album, _, _ := oaet(fileCSV)
+						drCSV(album, out, fileCSV)
+						remove <- file
+						doCSV(fileCSV)
+						fmt.Println(prompt)
+					}
+				}
+			}()
+
+			// Start listening for events.
+			go func() {
+				defer log.Println("Закончил слежку", watcher.WatchList())
+				for {
+					select {
+					case <-ctx.Done():
+						log.Println("Context Done")
+						return
+					case event, ok := <-watcher.Events:
+						if !ok {
+							log.Println("Events Done")
+							return
+						}
+						file := event.Name
+						// log.Println(event.Op.String(), file)
+						e := Ext(file)
+						if event.Has(fsnotify.Remove) {
+							log.Println("Пропал", file)
+							continue
+						}
+						// }
+						if event.Has(fsnotify.Create) {
+							log.Println("Появился", file)
+						} else if !event.Has(fsnotify.Write) {
+							continue
+						}
+						switch e {
+						case dotCSV, // Любой csv
+							".dpx", ".cin", ".tif", ".ppm", ".bmp", ".xpm", // Любая картинка для конвертации в .jpg Удаляю если с d8
+							".png", dotJPG: // Любая картинка для переименования с d8
+							isEmpty <- file
+						case dotFLAC:
+							file = trimFrame(file, dotFLAC)
+							fallthrough
+						default:
+							// Остальные если это результаты
+							fileCSV := ""
+							if att, _ := sourcesL(file); att != nil {
+								fileCSV = att.parent
+							}
+							// Или будущие результаты
+							if fileCSV == "" {
+								fileCSV, _ = futuresL(trimExt(file))
+							}
+							if fileCSV != "" {
+								// Но csv должен уже быть
+								if f, err := open(fileCSV); err == nil {
+									f.Close()
+									isEmpty <- event.Name
+								}
+							}
+						}
+					case err, ok := <-watcher.Errors:
+						if !ok {
+							log.Println("Errors Done")
+							return
+						}
+						log.Println("Ошибка слежки", err)
+					}
+				}
+			}()
+			for _, file := range dirs {
+				log.Println("Слежу за", file, watcher.Add(file))
 			}
 		}
-		if lenM(&sources)+len(dirs) == 0 {
-			// help
-			break
-		}
-		if lenM(&sources) == 0 {
-			continue
-		}
+
+		const (
+			src = "Исходные медиафайлы------------------------------"
+			trg = "Результирующие медиафайлы------------------------"
+		)
 		log.Println(src)
 		for _, file := range mapKeys("*", false) {
 			out, album, ext, _ := oaet(file)
@@ -740,19 +566,201 @@ end tell
 				drCSV(album, out, file)
 				continue
 			}
-			att, _ := sourcesL(file)
-			swrpp(file, att, tags)
+			if att, _ := sourcesL(file); att != nil {
+				att.tags.print(2, file, true)
+			}
 		}
+
 		results := mapKeys("*", true)
 		if len(results) > 0 {
 			log.Println(trg)
 			for _, file := range results {
+				if att, _ := sourcesL(file); att != nil {
+					att.tags.print(2, file, true)
+				}
+			}
+		}
+
+		for {
+			printHT("*")
+			fmt.Println(prompt)
+
+			etc = nil
+			eof := false
+		scan:
+			for eof = true; in.Scan(); eof = true {
+				eof = false
+				s := strings.TrimSpace(in.Text())
+				if s == "" {
+					break
+				}
+				if !strings.Contains(s, `"`) && !strings.Contains(s, `'`) && !darwin {
+					// tags
+					etc = append(etc, s)
+					continue
+				}
+				if s == `""` || s == `''` {
+					log.Println("Очистил список исходных медиафайлов")
+					sources = *new(sync.Map)
+					continue
+				}
+				// drag-n-drop?
+				files, err := SplitCommandLine(s)
+				if err != nil {
+					log.Println("drag-n-drop?", files, err)
+					continue
+				}
+				for _, file := range files {
+					f, err := open(file)
+					if err == nil {
+						f.Close()
+					} else if err.Error() != "isDir" {
+						if darwin {
+							etc = append(etc, s)
+							continue
+						}
+						log.Println("медиафайл?", file)
+						fmt.Println(prompt)
+						continue scan
+					}
+				}
+				log.Println("drag-n-drop", files)
+				// drag-n-drop
+				for _, file := range files {
+					file, err := filepath.Abs(file)
+					if err != nil {
+						continue
+					}
+					f, err := open(file)
+					if err == nil {
+						f.Close()
+						switch Ext(file) {
+						case dotCSV, dotMOV, dotMP4, dotFLAC, dotMP3:
+						default:
+							continue
+						}
+
+						if _, ok := sources.Load(file); !ok {
+							// Новые
+							out, album, ext, title := oaet(file)
+							att := &ATT{album, title, newTags(), false, "", ""}
+							sources.Store(file, att)
+							if ext == dotCSV {
+								drCSV(album, out, file)
+								doCSV(file)
+							} else {
+								att.audio, _ = probe(filepath.Dir(file), filepath.Base(file), false)
+								swrpp(file, att, nil)
+								printHT("*")
+							}
+						}
+					} else if err.Error() == "isDir" {
+						// dir
+						if watcher != nil {
+							err := watcher.Add(file)
+							if err != nil {
+								log.Println("Слежу за", file, err)
+							}
+						}
+					}
+				}
+				if watcher != nil && len(watcher.WatchList()) > 0 {
+					log.Println("Слежу за", watcher.WatchList())
+				}
+				fmt.Println(prompt)
+			}
+			if in.Err() != nil || eof {
+				return
+			}
+			// Закончил ввод тэгов
+			tags := newTags(etc...)
+			if _, ok := tags["=="]; ok {
+				delete(tags, "==")
+				for _, file := range mapKeys("*", false) {
+					att, _ := sourcesL(file)
+					if att == nil {
+						continue
+					}
+
+					a, probes := probe(filepath.Dir(file), filepath.Base(file), false)
+					att.audio = a
+					swrpp(file, att, tags)
+					// добавляет в sources
+					if slices.Contains(probes, "format_name=mpegts") {
+						mov := file + dotMOV
+						if f, err := open(mov); err == nil {
+							f.Close()
+							sources.Store(mov, att)
+							sources.Delete(file)
+							file = mov
+							probe(filepath.Dir(file), filepath.Base(file), false)
+						} else {
+							args := []string{
+								"-hide_banner",
+								"-v", "error",
+								"-i", filepath.Base(file),
+								"-c", "copy", mov,
+							}
+							rs, err := run(ctx, os.Stdout, "ffmpeg", filepath.Dir(file), args...)
+							if err == nil && rs == 0 {
+								log.Println(file, "~>", mov)
+								sources.Store(mov, att)
+								sources.Delete(file)
+								file = mov
+								probe(filepath.Dir(file), filepath.Base(file), false)
+							} else {
+								log.Println("Не удалось создать файл", mov, err, "код завершения", rs)
+							}
+						}
+					} else {
+						att.tags.timeLine(att.album, filepath.Dir(file), file, a, "", probes...)
+					}
+				}
+			}
+			if lenM(&sources)+len(dirs) == 0 {
+				// help
+				break
+			}
+			if lenM(&sources) == 0 {
+				continue
+			}
+			log.Println(src)
+			for _, file := range mapKeys("*", false) {
+				out, album, ext, _ := oaet(file)
+				if ext == dotCSV {
+					drCSV(album, out, file)
+					continue
+				}
 				att, _ := sourcesL(file)
 				swrpp(file, att, tags)
 			}
+			results := mapKeys("*", true)
+			if len(results) > 0 {
+				log.Println(trg)
+				for _, file := range results {
+					att, _ := sourcesL(file)
+					swrpp(file, att, tags)
+				}
+			}
 		}
 	}
-	// help()
+
+	if lenFD == 0 {
+		fmt.Print("\a")
+		cleanup, err := initializeAppLock(drTags)
+		if err != nil {
+			log.Println("Одного дроплета достаточно", err)
+		} else {
+			closer.Bind(cleanup)
+			go func() {
+				loop()
+				closer.Close()
+			}()
+			showDroplet(title)
+			return
+		}
+	}
+	loop()
 }
 
 // Set tags Write file Read file Print tags Parse att
