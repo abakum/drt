@@ -17,6 +17,7 @@ import (
 
 	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/gtk"
+	"github.com/xlab/closer"
 )
 
 func showDroplet(title string) {
@@ -87,6 +88,7 @@ func showDroplet(title string) {
 	applyOppositeTheme(window)
 	window.ShowAll()
 	gtk.Main()
+	closer.Close()
 }
 
 func dropPaths(paths string) {
