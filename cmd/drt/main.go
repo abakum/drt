@@ -291,16 +291,13 @@ end tell
 	}
 	if lenFD == 0 {
 		fmt.Print("\a")
-		// log.Println("droplet")
 		cleanup, err := initializeAppLock(drTags)
 		if err != nil {
 			log.Println("Одного дроплета достаточно", err)
-			return
+		} else {
+			closer.Bind(cleanup)
+			go showDroplet(title)
 		}
-		closer.Bind(cleanup)
-
-		showDroplet(title)
-		return
 	}
 
 	for _, file := range mapKeys("*", false) {

@@ -8,13 +8,11 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/gotk3/gotk3/gdk"
@@ -80,10 +78,6 @@ func showDroplet(title string) {
 	window.Connect("drag-data-received", handleDrop)
 	applyOppositeTheme(window)
 	window.ShowAll()
-	if isGUI() {
-		log.Println("isGUI")
-		hideTerminalWindow()
-	}
 	gtk.Main()
 }
 
@@ -150,41 +144,4 @@ func applyOppositeTheme(window *gtk.Window) {
 	_ = cssProvider.LoadFromData(css)
 	screen, _ := gdk.ScreenGetDefault()
 	gtk.AddProviderForScreen(screen, cssProvider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-}
-
-func getTerminalScreenPath() (string, error) {
-	cmd := exec.Command(
-		"dbus-send", "--print-reply", "--dest=org.gnome.Terminal",
-		"/org/gnome/Terminal", "org.freedesktop.DBus.ObjectManager.GetManagedObjects")
-
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	// Парсим вывод для нахождения пути к экрану
-	re := regexp.MustCompile(`/org/gnome/Terminal/screen/[a-f0-9_]+`)
-	matches := re.FindStringSubmatch(string(out))
-	if len(matches) == 0 {
-		return "", fmt.Errorf("terminal screen path not found")
-	}
-
-	return matches[0], nil
-}
-
-func hideTerminalWindow() error {
-	screenPath, err := getTerminalScreenPath()
-	log.Println(screenPath, err)
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.Command(
-		"dbus-send", "--print-reply", "--dest=org.gnome.Terminal",
-		screenPath, "org.gtk.Actions.Activate",
-		"string:\"win.close\"", "array:string:", "variant:string:\"\"")
-
-	err = cmd.Start()
-	log.Println(cmd, err)
-	return err
 }
