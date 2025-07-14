@@ -752,7 +752,7 @@ end tell
 			}
 		}
 	}
-	help()
+	// help()
 }
 
 // Set tags Write file Read file Print tags Parse att

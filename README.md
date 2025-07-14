@@ -140,7 +140,27 @@ MovementName=2 Scherzo Allegro marcato
 ```
 go install github.com/abakum/drt/cmd/drt@main
 ```
+- Или
+```
+cd ~/src
+git clone https://github.com/abakum/drt
+cd drt/cmd/drt
+go install
+```
 
 # Как установить drTags
 
-Запусти `drt` ответь `Y` на предложение `install drTags?`
+- Запусти `drt -h` ответь `Y` на предложение `install drTags?`
+- Или нажми клавишу `Enter` чтоб отказаться
+- Для Explorer, Nautilus, Finder появятся меню `Открыть с помощью`
+- Для Windows меню `Отправить~drTags` shell:sendto\drTags.lnk и ярлык drTags.lnk на рабочем столе и в меню программ
+- Для Linux меню `Сценарии~drTags` ~/.local/share/nautilus/scripts/drTags и ярлык drTags.desktop на рабочем столе и в ~/.local/applications
+- Для MacOS меню `Служба~drTags` `~/Library/Services/drTags.workflow` и папка /Applications/drTags.app
+- Если не установлен ffmpeg создам ссылку ffmpeg~>drt
+- Если не установлен ffprobe создам ссылку ffprobe~>drt
+
+# Как убрать drTags
+
+- Запусти `drt -h` ответь `Y` на предложение `uninstall drTags?`
+- Или нажми клавишу `Enter` чтоб отказаться
+- Всё что устанавливалось уберётся
