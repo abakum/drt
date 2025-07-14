@@ -8,11 +8,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/gotk3/gotk3/gdk"
@@ -86,16 +86,16 @@ func dropPaths(paths string) {
 	if len(opts) == 0 {
 		return
 	}
-	ex := drTags
-	if _, err := exec.LookPath(ex); err != nil {
-		//Если не в путёвом
-		ex = filepath.Join(dir, drTags)
-	}
 
-	cmd := exec.Command(xTerminalEmulator, "-T", drTags, "-e", ex)
-	cmd.Env = append(os.Environ(), NAUTILUS_SCRIPT_SELECTED_FILE_PATHS+"="+paths)
+	// cmd := exec.Command(xTerminalEmulator, "-T", drTags, "-e", LookPath(drTags))
+	cmd := exec.Command(launch, append([]string{drTags}, opts...)...)
+	if len(opts) > 3 {
+		cmd = exec.Command(launch, drTags)
+		cmd.Env = append(os.Environ(), NAUTILUS_SCRIPT_SELECTED_FILE_PATHS+"="+paths)
+	}
 	err := cmd.Start()
 	log.Println(qPaths(cmd.Args...), err)
+	fmt.Println(prompt)
 }
 
 func getSystemTheme() string {

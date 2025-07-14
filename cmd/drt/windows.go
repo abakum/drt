@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/adrg/xdg"
 	"github.com/jxeng/shortcut"
@@ -378,9 +379,14 @@ func evtp() {
 func SplitCommandLine(command string) ([]string, error) {
 	return windows.DecomposeCommandLine(command)
 }
-func onMain() {
 
+func onMain(consoleTitle string) {
+	ptr, _ := windows.UTF16PtrFromString(consoleTitle)
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	setConsoleTitleProc := kernel32.NewProc("SetConsoleTitleW")
+	setConsoleTitleProc.Call(uintptr(unsafe.Pointer(ptr)))
 }
+
 func isGUI() bool {
 	return !strings.HasPrefix(os.Environ()[0], "=")
 }
@@ -421,7 +427,6 @@ func (ddw *DragDropWindow) setupEventHandlers() {
 		defer hDrop.DragFinish() // Важно: освобождаем ресурсы
 
 		if files, err := hDrop.DragQueryFile(); err == nil {
-			// logPaths(strings.Join(files, "\n"))
 			dropPaths(strings.Join(files, "\n"))
 			// Показываем уведомление (первые 10 файла)
 			// displayFiles := files
@@ -508,10 +513,16 @@ func dropPaths(paths string) {
 	if len(opts) == 0 {
 		return
 	}
+
 	cmd := exec.Command(drt, opts...)
+	if len(opts) > 3 {
+		cmd = exec.Command(drt)
+		cmd.Env = append(os.Environ(), NAUTILUS_SCRIPT_SELECTED_FILE_PATHS+"="+paths)
+	}
 	createNewConsole(cmd)
 	err := cmd.Start()
 	log.Println(qPaths(cmd.Args...), err)
+	fmt.Println(prompt)
 }
 
 // cmd = exec.Command("cmd", "/c", "start", "/b", bin, opt)

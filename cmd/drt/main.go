@@ -71,6 +71,7 @@ const (
 Введи "имя файла" или drag-n-drop или тэг=значение`
 	NAUTILUS_SCRIPT_SELECTED_FILE_PATHS = "NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"
 	xTerminalEmulator                   = "x-terminal-emulator"
+	launch                              = "gtk-launch"
 )
 
 var (
@@ -153,8 +154,9 @@ func main() {
 		}
 	}
 	wd, _ := os.Getwd()
-	log.Println(exe, VERSION, wd, os.Args[0])
-	onMain()
+	Tit := fmt.Sprintf("%s %s %s %s", exe, VERSION, wd, os.Args[0])
+	log.Println(Tit)
+	onMain(Tit)
 
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()
@@ -1203,4 +1205,12 @@ func qPaths(paths ...string) []string {
 		}
 	}
 	return quoted
+}
+
+func LookPath(drTags string) string {
+	if _, err := exec.LookPath(drTags); err != nil {
+		//Если не в путёвом
+		return filepath.Join(dir, drTags)
+	}
+	return drTags
 }

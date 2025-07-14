@@ -354,7 +354,7 @@ var (
 	once bool
 )
 
-func onMain() {
+func onMain(consoleTitle string) {
 	var files []string
 	if len(os.Args) > 1 {
 		files = os.Args[1:]
@@ -411,10 +411,9 @@ func dropPaths(paths string) {
 	}
 	cmd := exec.Command("osascript", opts...)
 	output, err := cmd.CombinedOutput()
-	// log.Println(cmd, err)
 	if err != nil {
+		log.Println(cmd, err)
 		log.Println(string(output))
-		log.Println(err)
 	}
 }
 
@@ -436,8 +435,7 @@ func install(oldname string, lnks ...string) {
 	var script []byte
 
 	// Грязные параметры для fn
-	_, err := exec.LookPath(drTags)
-	replace := err != nil
+	replace := LookPath(drTags)
 	dest := filepath.Dir(adr)
 	efs := app
 
@@ -468,8 +466,8 @@ func install(oldname string, lnks ...string) {
 			if err != nil {
 				return err
 			}
-			if replace {
-				script = bytes.Replace(script, []byte(`"`+drTags+`"`), []byte(`"`+filepath.Join(dir, drTags)+`"`), 1)
+			if replace != drTags {
+				script = bytes.Replace(script, []byte(`"`+drTags+`"`), []byte(`"`+replace+`"`), 1)
 				err = os.WriteFile(destPath, script, 0644)
 				log.Println("~>", path, err)
 				if err != nil {
