@@ -34,12 +34,17 @@ func install(oldname string, lnks ...string) {
 	ln(oldname, link, true, false)
 
 	ex := LookPath(drTags)
+	if _, err := exec.LookPath(nautilus); err == nil {
+		shString := fmt.Sprintf(`#!/usr/bin/env bash
 
-	if _, err := exec.LookPath("nautilus"); err == nil {
-		log.Println("Меню для nautilus", sh,
-			os.WriteFile(sh, []byte(fmt.Sprintf(`#!/usr/bin/env bash
+x-terminal-emulator -e %s`, ex)
+		if hasGtkLaunch() {
+			shString = fmt.Sprintf(`#!/usr/bin/env bash
 
-x-terminal-emulator -T %s -e %s`, drTags, ex)), 0744))
+%s %s`, launch, drTags)
+		}
+		log.Println("Меню для", nautilus, sh,
+			os.WriteFile(sh, []byte(shString), 0744))
 	}
 	deskTop(desktop, ex)
 	cmd := exec.CommandContext(ctx, "desktop-file-install", "--rebuild-mime-info-cache", desktop, "--dir="+applications) //
@@ -63,7 +68,8 @@ func deskTop(desktop, ex string) {
 	MimeType := strings.Join(Values(met), ";")
 	log.Println("Ярлык на рабочем столе", desktop,
 		os.WriteFile(desktop, []byte(`[Desktop Entry]
-Name=drTags
+Name=`+drTags+`
+Comment=`+FriendlyAppName+`
 Type=Application
 Exec=`+ex+` %F
 Terminal=true

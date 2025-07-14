@@ -49,29 +49,30 @@ import (
 )
 
 const (
-	drt     = "drt"     // для консоли
-	drTags  = "drTags"  // для GUI
-	droplet = "droplet" // для дроплета
-	title   = "dr&Tags" // для дроплета
-	dX      = 100
-	dY      = 80
-	repo    = "com.github.abakum." + drt
-	dotCSV  = ".csv"
-	dotMOV  = ".mov"
-	dotMXF  = ".mxf"
-	dotAVI  = ".avi"
-	dotWAV  = ".wav"
-	dotAAC  = ".aac"
-	dotMP4  = ".mp4"
-	dotFLAC = ".flac"
-	dotMP3  = ".mp3"
-	dotJPG  = ".jpg"
-	dotLUA  = ".lua"
-	prompt  = `Пустая строка подтверждает ввод, ^С прерывает ввод.
+	drt             = "drt"     // для консоли
+	drTags          = "drTags"  // для GUI
+	droplet         = "droplet" // для дроплета
+	title           = "dr&Tags" // для дроплета
+	FriendlyAppName = "Tagger for DaVinci Resolve"
+	dX              = 100
+	dY              = 80
+	repo            = "com.github.abakum." + drt
+	dotCSV          = ".csv"
+	dotMOV          = ".mov"
+	dotMXF          = ".mxf"
+	dotAVI          = ".avi"
+	dotWAV          = ".wav"
+	dotAAC          = ".aac"
+	dotMP4          = ".mp4"
+	dotFLAC         = ".flac"
+	dotMP3          = ".mp3"
+	dotJPG          = ".jpg"
+	dotLUA          = ".lua"
+	prompt          = `Пустая строка подтверждает ввод, ^С прерывает ввод.
 Введи "имя файла" или drag-n-drop или тэг=значение`
 	NAUTILUS_SCRIPT_SELECTED_FILE_PATHS = "NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"
-	xTerminalEmulator                   = "x-terminal-emulator"
 	launch                              = "gtk-launch"
+	nautilus                            = "nautilus"
 )
 
 var (
@@ -240,15 +241,15 @@ end tell
 	dir = filepath.Dir(exe)
 	ext = filepath.Ext(exe)
 
-	nautilus := os.Getenv(NAUTILUS_SCRIPT_SELECTED_FILE_PATHS)
-	nautilus = strings.TrimSpace(nautilus)
+	ns := os.Getenv(NAUTILUS_SCRIPT_SELECTED_FILE_PATHS)
+	ns = strings.TrimSpace(ns)
 
 	var args []string
 	dash := false
 	switch {
-	case nautilus != "":
-		args = strings.Split(nautilus, "\n")
-		log.Println("nautilus", args)
+	case ns != "":
+		args = strings.Split(ns, "\n")
+		log.Println(NAUTILUS_SCRIPT_SELECTED_FILE_PATHS, args)
 	case len(os.Args) > 1:
 		switch strings.ToLower(os.Args[1]) {
 		case "-":
@@ -895,7 +896,7 @@ func help() {
 		)
 	case "linux":
 		// Меню в Наутилусе
-		sh := filepath.Join(xdg.DataHome, "nautilus/scripts", drTags)
+		sh := filepath.Join(xdg.DataHome, nautilus, "scripts", drTags)
 		xdgDesktopIcon := "xdg-desktop-icon"
 
 		if verb == "uninstall" {
@@ -1213,4 +1214,65 @@ func LookPath(drTags string) string {
 		return filepath.Join(dir, drTags)
 	}
 	return drTags
+}
+
+// Launch пытается запустить приложение через gtk-launch, если это .desktop файл,
+// иначе запускает команду в терминале
+func Launch(app string, args ...string) error {
+	// Если это .desktop файл и есть gtk-launch
+	if strings.HasSuffix(app, ".desktop") && hasGtkLaunch() {
+		return launchDesktop(app, args...)
+	}
+
+	// Иначе запускаем в терминале
+	return openTerminal(app, args...)
+}
+
+// Проверяет наличие gtk-launch в системе
+func hasGtkLaunch() bool {
+	_, err := exec.LookPath(launch)
+	return err == nil
+}
+
+// Запуск .desktop файла через gtk-launch
+func launchDesktop(desktopFile string, args ...string) error {
+	cmdArgs := append([]string{desktopFile}, args...)
+	cmd := exec.Command(launch, cmdArgs...)
+	return cmd.Start()
+}
+
+// Запуск команды в терминале (кросс-платформенный)
+func openTerminal(bin string, args ...string) error {
+	var cmd *exec.Cmd
+	opts := append([]string{"-e", bin}, args...)
+
+	switch runtime.GOOS {
+	case "linux":
+		// Пробуем разные терминалы
+		for _, term := range []string{"x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm"} {
+			if path, err := exec.LookPath(term); err == nil {
+				switch term {
+				case "x-terminal-emulator", "gnome-terminal", "xfce4-terminal", "xterm":
+					cmd = exec.Command(path, opts...)
+				case "konsole":
+					opts := append([]string{"-e", "sh", "-c", bin}, args...)
+					cmd = exec.Command(path, opts...)
+				}
+				break
+			}
+		}
+	case "darwin":
+		opts := append([]string{"-a", "Terminal", bin}, args...)
+		cmd = exec.Command("open", opts...)
+	case "windows":
+		opts := append([]string{"/c", "start", bin}, args...)
+		cmd = exec.Command("cmd", opts...)
+	default:
+		return errors.New("unsupported platform")
+	}
+
+	if cmd == nil {
+		return errors.New("no terminal emulator found")
+	}
+	return cmd.Start()
 }
