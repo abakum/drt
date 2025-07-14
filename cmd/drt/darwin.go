@@ -507,6 +507,12 @@ func install(oldname string, lnks ...string) {
 	os.MkdirAll(MacOS, 0755)
 	ln(oldname, drtlet, true, false)
 	log.Println("chmod +x", drtlet, os.Chmod(drtlet, 0755))
+	cmd := exec.Command("xattr", "-cr", adr)
+	err := cmd.Start()
+	log.Println(cmd, err)
+	if err == nil {
+		cmd.Wait()
+	}
 
 	dest = filepath.Dir(servicePath)
 	efs = workflow

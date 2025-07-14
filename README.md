@@ -98,14 +98,14 @@ MovementName=2 Scherzo Allegro marcato
 # drt.lua
 
 - Из `DaVinci Resole` с панели `Media` можно вручную:
-  - Эспортировать метаданные в .csv файлы: File~>Export Metadata From~>Selected Media Pool Clips
-  - Сохранять таймлайны в .drt файлы: File~>Export~>Timeline
-  - Сохранять маркеры таймлайнов в .edl файлы: ПКМ на таймлайне~>Timelines~>Export~>Timelines Margers To EDL
+  - Эспортировать метаданные в .csv файлы: `File~Export Metadata From~Selected Media Pool Clips`
+  - Сохранять таймлайны в .drt файлы: `File~Export~Timeline`
+  - Сохранять маркеры таймлайнов в .edl файлы: `ПКМ на таймлайне~Timelines~Export~Timelines Margers To EDL`
 - Из `DaVinci Resole` с панели `Deliver` можно вручную:
   - Эспортировать кадры в .tif или .png файлы.
 - Но с помощью скрипта `drt.lua` это веселей:
-  - Workspace~>Console
-  - Workspace~>Scripts~>drt
+  - `Workspace~Console`
+  - `Workspace~Scripts~drt`
 - Пусть исходные медиафайлы лежат в каталоге `foo/` а таймлайн называется `bar`. Вот что сделает `drt.lua`:
   - Экспорт метаданных в `foo/bar.csv`
   - Если стать на синий маркер то только синие маркеры будут экспортированы.
@@ -152,6 +152,7 @@ go install
 
 - Запусти `drt -h` ответь `Y` на предложение `install drTags?`
 - Или нажми клавишу `Enter` чтоб отказаться
+- Если установлен `DaVinci Resolve ` появится меню `Workspace~Scripts~drt`
 - Для Explorer, Nautilus, Finder появятся меню `Открыть с помощью`
 - Для Windows меню `Отправить~drTags` shell:sendto\drTags.lnk и ярлык drTags.lnk на рабочем столе и в меню программ
 - Для Linux меню `Сценарии~drTags` ~/.local/share/nautilus/scripts/drTags и ярлык drTags.desktop на рабочем столе и в ~/.local/applications
