@@ -36,17 +36,17 @@ var (
 		filepath.Join(xdg.DataDirs[1], "Blackmagic Design", "DaVinci Resolve"),
 	}
 )
-var (
-	user32   = syscall.NewLazyDLL("user32.dll")
-	kernel32 = syscall.NewLazyDLL("kernel32.dll")
-
-	// Функции WinAPI
-	getConsoleWindow = kernel32.NewProc("GetConsoleWindow")
-	showWindow       = user32.NewProc("ShowWindow")
-	getLastError     = kernel32.NewProc("GetLastError")
-)
 
 func hideConsole() {
+	var (
+		user32   = syscall.NewLazyDLL("user32.dll")
+		kernel32 = syscall.NewLazyDLL("kernel32.dll")
+
+		// Функции WinAPI
+		getConsoleWindow = kernel32.NewProc("GetConsoleWindow")
+		showWindow       = user32.NewProc("ShowWindow")
+		getLastError     = kernel32.NewProc("GetLastError")
+	)
 	console, _, _ := getConsoleWindow.Call()
 	if console == 0 {
 		errCode, _, _ := getLastError.Call()
@@ -386,9 +386,9 @@ func isGUI() bool {
 }
 
 func showDroplet(title string) {
-	if isGUI() {
-		hideConsole()
-	}
+	// if isGUI() {
+	// 	hideConsole()
+	// }
 	runtime.LockOSThread() // Важно для однопоточного GUI Windows
 
 	// Создаем и запускаем окно
@@ -437,11 +437,6 @@ func (ddw *DragDropWindow) setupEventHandlers() {
 		}
 	})
 }
-
-const (
-	PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-	ERROR_ALREADY_EXISTS              = 183
-)
 
 func createAppLock(appName string) (*os.File, error) {
 	// Создаем именованный мьютекс
@@ -492,13 +487,13 @@ func checkProcessExists(pid int) bool {
 	}
 	return true
 
-	const (
-		STILL_ACTIVE = 259
-	)
-	var exitCode uint32
-	err := windows.GetExitCodeProcess(handle, &exitCode)
-	windows.CloseHandle(handle)
-	return err != nil && exitCode == STILL_ACTIVE
+	// const (
+	// 	STILL_ACTIVE = 259
+	// )
+	// var exitCode uint32
+	// err := windows.GetExitCodeProcess(handle, &exitCode)
+	// windows.CloseHandle(handle)
+	// return err != nil && exitCode == STILL_ACTIVE
 }
 
 func cleanupLock(lockFile *os.File) {
