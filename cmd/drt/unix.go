@@ -12,7 +12,7 @@ import (
 
 func createAppLock(appName string) (*os.File, error) {
 	// Создаем временный файл
-	file, err := os.CreateTemp("", appName+"_*.lock")
+	file, err := os.CreateTemp("", appName+"_*"+dotLock)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create lock file: %v", err)
 	}
@@ -58,4 +58,26 @@ func cleanupLock(lockFile *os.File) {
 
 func isGUI() bool {
 	return strings.ToLower(args0) != drt
+}
+
+// safeWriteFile_Linux записывает данные в файл с эксклюзивной блокировкой (flock).
+// Пакет: syscall (Linux/Unix) или golang.org/x/sys/unix.
+func safeWriteFile(filename string, data []byte) error {
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	// Блокировка файла (эксклюзивная)
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("failed to lock file: %w", err)
+	}
+	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN) // Разблокировать при выходе
+
+	// Запись данных
+	if _, err := file.Write(data); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+	return nil
 }

@@ -68,6 +68,9 @@ const (
 	dotMP3          = ".mp3"
 	dotJPG          = ".jpg"
 	dotLUA          = ".lua"
+	dotTXT          = ".txt"
+	dotPID          = ".pid"
+	dotLock         = ".lock"
 	prompt          = `Пустая строка подтверждает ввод, ^С прерывает ввод.
 Введи "имя файла" или drag-n-drop или тэг=значение`
 	NAUTILUS_SCRIPT_SELECTED_FILE_PATHS = "NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"
@@ -148,7 +151,7 @@ func main() {
 	if err != nil {
 		if lp, err := exec.LookPath(args0); err == nil {
 			exe = lp
-		} else if abs, err := filepath.Abs(args0); err == nil {
+		} else if abs, err := Abs(args0); err == nil {
 			exe = abs
 		} else {
 			log.Fatalf("Где я? %v", err)
@@ -203,7 +206,7 @@ end tell
 			ok = arg == "-i"
 		}
 		// c.d
-		file, err = filepath.Abs(inp)
+		file, err = Abs(inp)
 		// a:\b\c.d
 		if err == nil {
 			if inp == "" {
@@ -269,9 +272,37 @@ end tell
 		args = finder[:]
 	}
 	//---------------------------------------------------------------------------
+	paths := []string{}
+	for _, file := range args {
+		file, err := Abs(file)
+		if err != nil {
+			break
+		}
+		f, err := open(file)
+		if err != nil {
+			if err.Error() == "isDir" {
+				paths = append(paths, file)
+				continue
+			}
+			break
+		}
+		f.Close()
+		paths = append(paths, file)
+	}
+	lenFD := len(paths)
+	if len(args) > lenFD {
+		etc = args[lenFD:]
+		argsTags = strings.Contains(strings.Join(etc, " "), "=")
+	}
+	// log.Println("paths", paths)
+	// log.Println("etc", etc)
+	args = setPaths(drTags, paths...)
+	// log.Println("args", args)
+
+	paths = []string{}
 	dirs := []string{}
 	for _, file := range args {
-		file, err := filepath.Abs(file)
+		file, err := Abs(file)
 		if err != nil {
 			break
 		}
@@ -279,19 +310,17 @@ end tell
 		if err != nil {
 			if err.Error() == "isDir" {
 				dirs = append(dirs, file)
-				continue
+				paths = append(paths, file)
 			}
-			break
+			continue
 		}
 		f.Close()
 		sources.Store(file, &ATT{})
+		paths = append(paths, file)
 	}
-
-	lenFD := lenM(&sources) + len(dirs)
-	if len(args) > lenFD {
-		etc = args[lenFD:]
-		argsTags = strings.Contains(strings.Join(etc, " "), "=")
-	}
+	lenFD = len(paths)
+	// log.Println("paths", paths)
+	// log.Println("dirs", dirs)
 
 	loop := func() {
 		for _, file := range mapKeys("*", false) {
@@ -602,6 +631,7 @@ end tell
 				if s == `""` || s == `''` {
 					log.Println("Очистил список исходных медиафайлов")
 					sources = *new(sync.Map)
+					setPaths(drTags)
 					continue
 				}
 				// drag-n-drop?
@@ -610,6 +640,7 @@ end tell
 					log.Println("drag-n-drop?", files, err)
 					continue
 				}
+				files = setPaths(drTags, files...)
 				for _, file := range files {
 					f, err := open(file)
 					if err == nil {
@@ -627,7 +658,7 @@ end tell
 				log.Println("drag-n-drop", files)
 				// drag-n-drop
 				for _, file := range files {
-					file, err := filepath.Abs(file)
+					file, err := Abs(file)
 					if err != nil {
 						continue
 					}
@@ -1160,7 +1191,7 @@ func copyLUA(srcFile []byte, base string, DRS ...string) (err error) {
 }
 func initializeAppLock(appName string) (func(), error) {
 	// Проверить существующие lock-файлы
-	matches, err := filepath.Glob(filepath.Join(os.TempDir(), appName+"_*.lock"))
+	matches, err := filepath.Glob(filepath.Join(os.TempDir(), appName+"_*"+dotLock))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search lock files: %v", err)
 	}
@@ -1196,6 +1227,93 @@ func initializeAppLock(appName string) (func(), error) {
 	return func() {
 		cleanupLock(lockFile)
 	}, nil
+}
+
+// Если paths пустой, то очищаем список
+func setPaths(appName string, paths ...string) (newPaths []string) {
+	var (
+		allPaths []string
+		myPaths  []string
+		myTXT    string
+	)
+	// Проверить существующие pid-файлы
+	matches, _ := filepath.Glob(filepath.Join(os.TempDir(), appName+"_*"+dotPID))
+	for _, filename := range matches {
+		content, err := os.ReadFile(filename)
+		if err != nil {
+			continue
+		}
+
+		pid, err := strconv.Atoi(strings.TrimSpace(string(content)))
+		if err != nil {
+			continue
+		}
+
+		if checkProcessExists(pid) {
+			bs, err := os.ReadFile(filename + dotTXT)
+			if err == nil {
+				thisPaths := strings.Fields(string(bs))
+				if pid == os.Getpid() {
+					myTXT = filename + dotTXT
+					if len(bs) > 0 {
+						myPaths = append(myPaths, thisPaths...)
+					}
+				}
+				if len(bs) > 0 {
+					allPaths = append(allPaths, thisPaths...)
+				}
+			}
+		} else {
+			// Удаляем устаревшие файлы
+			log.Println(filename, "~> nul", os.Remove(filename))
+			os.Remove(filename + dotTXT)
+		}
+	}
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		path, err := Abs(path)
+		if err != nil {
+			continue
+		}
+		if !slices.Contains(allPaths, path) && !slices.Contains(myPaths, path) {
+			myPaths = append(myPaths, path)
+			newPaths = append(newPaths, path)
+		}
+	}
+	if myTXT == "" {
+		// Создаем временный файл для записи PID
+		file, err := os.CreateTemp("", appName+"_*"+dotPID)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		myTXT = file.Name() + dotTXT
+		_, err = file.WriteString(fmt.Sprintf("%d", os.Getpid()))
+		file.Close()
+
+		if err != nil {
+			log.Println(file.Name(), os.Getpid(), err)
+			os.Remove(file.Name())
+			return
+		}
+		closer.Bind(func() {
+			os.Remove(file.Name())
+			os.Remove(myTXT)
+		})
+	}
+	s := strings.Join(myPaths, "\n")
+	if len(paths) == 0 {
+		s = ""
+	}
+	err := os.WriteFile(myTXT, []byte(s), 0644)
+	if err != nil {
+		log.Println(myTXT, err)
+		return nil
+	}
+	return
 }
 
 // Проверяет, заключен ли путь в кавычки
@@ -1283,4 +1401,19 @@ func openTerminal(bin string, args ...string) error {
 		return errors.New("no terminal emulator found")
 	}
 	return cmd.Start()
+}
+
+// abs возвращает абсолютный путь, приводя букву диска к нижнему регистру (только для Windows).
+func Abs(path string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+
+	// Если путь начинается с буквы диска (например, "C:\"), делаем её строчной.
+	if len(absPath) > 1 && absPath[1] == ':' {
+		absPath = strings.ToLower(absPath[:1]) + absPath[1:]
+	}
+
+	return absPath, nil
 }

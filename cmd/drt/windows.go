@@ -463,7 +463,7 @@ func createAppLock(appName string) (*os.File, error) {
 	}
 
 	// Создаем временный файл для записи PID
-	file, err := os.CreateTemp("", appName+"_*.lock")
+	file, err := os.CreateTemp("", appName+"_*"+dotLock)
 	if err != nil {
 		syscall.CloseHandle(syscall.Handle(handle))
 		return nil, fmt.Errorf("failed to create lock file: %v", err)
@@ -531,4 +531,32 @@ func createNewConsole(cmd *exec.Cmd) {
 		CreationFlags:    windows.CREATE_NEW_CONSOLE,
 		NoInheritHandles: true,
 	}
+}
+
+// safeWriteFile_Windows записывает данные в файл с эксклюзивной блокировкой (LockFileEx).
+func safeWriteFile(filename string, data []byte) error {
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	// Получаем handle файла для Windows API
+	handle := windows.Handle(file.Fd())
+
+	flags := uint32(windows.LOCKFILE_EXCLUSIVE_LOCK | windows.LOCKFILE_FAIL_IMMEDIATELY)
+
+	// Пытаемся заблокировать файл
+	overlapped := &windows.Overlapped{}
+	err = windows.LockFileEx(handle, flags, 0, ^uint32(0), ^uint32(0), overlapped)
+	if err != nil {
+		return fmt.Errorf("failed to lock file: %w", err)
+	}
+	defer windows.UnlockFileEx(handle, 0, ^uint32(0), ^uint32(0), overlapped) // Разблокировать
+
+	// Запись данных
+	if _, err := file.Write(data); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+	return nil
 }
