@@ -1252,7 +1252,7 @@ func setPaths(appName string, paths ...string) (newPaths []string) {
 		if checkProcessExists(pid) {
 			bs, err := os.ReadFile(filename + dotTXT)
 			if err == nil {
-				thisPaths := strings.Fields(string(bs))
+				thisPaths := strings.Split(string(bs), "\n")
 				if pid == os.Getpid() {
 					myTXT = filename + dotTXT
 					if len(bs) > 0 {
