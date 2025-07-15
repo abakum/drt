@@ -380,8 +380,8 @@ func SplitCommandLine(command string) ([]string, error) {
 	return windows.DecomposeCommandLine(command)
 }
 
-func onMain(consoleTitle string) {
-	ptr, _ := windows.UTF16PtrFromString(consoleTitle)
+func onMain() {
+	ptr, _ := windows.UTF16PtrFromString(repo)
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	setConsoleTitleProc := kernel32.NewProc("SetConsoleTitleW")
 	setConsoleTitleProc.Call(uintptr(unsafe.Pointer(ptr)))

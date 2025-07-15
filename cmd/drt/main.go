@@ -158,9 +158,8 @@ func main() {
 		}
 	}
 	wd, _ := os.Getwd()
-	Tit := fmt.Sprintf("%s %s %s %s", exe, VERSION, wd, os.Args[0])
-	log.Println(Tit)
-	onMain(Tit)
+	log.Println(exe, VERSION, wd, os.Args[0])
+	onMain()
 
 	ctx, cncl = context.WithCancel(context.Background())
 	defer closer.Close()

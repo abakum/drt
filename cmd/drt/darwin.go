@@ -354,7 +354,11 @@ var (
 	once bool
 )
 
-func onMain(consoleTitle string) {
+// Если в терминале
+func onMain() {
+	// fmt.Printf("\033]0;%s\007", repo)
+	// closer.Bind(func() { fmt.Printf("\033]0;%s\007", "") })
+
 	var files []string
 	if len(os.Args) > 1 {
 		files = os.Args[1:]
@@ -371,21 +375,23 @@ func onMain(consoleTitle string) {
 			files = finder[:]
 		}
 	}
-	if strings.ToLower(args0) != droplet {
-		return
-	}
 
 	// log.Println(files)
 	if !once {
 		once = true
-		MacOS := filepath.Dir(os.Args[0])
-		Contents := filepath.Dir(MacOS)
-		scriptName := filepath.Join(Contents, Resources, applescript)
+		// MacOS := filepath.Dir(os.Args[0])
+		// Contents := filepath.Dir(MacOS)
+		// scriptName := filepath.Join(Contents, Resources, applescript)
+		scriptName := filepath.Join("/Applications/drTags.app/Contents/Resources", applescript)
+		log.Println(scriptName)
 		script, err := os.ReadFile(scriptName)
 		if err == nil {
 			as = string(script)
 			asOk = true
 		}
+	}
+	if strings.ToLower(args0) != droplet {
+		return
 	}
 	if len(files) == 0 {
 		exec.Command("osascript", "-e", "beep").Start()

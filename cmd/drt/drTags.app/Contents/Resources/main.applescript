@@ -29,32 +29,34 @@ on runInput(input)
 
     if not terminalInstalled then
         set the clipboard to shellCmd
-        display dialog "Terminal.app не доступен." &  return & ¬
-                    "Команда:" & return & shellCmd & return & ¬
-                    "скопирована в буфер. Вставьте её в другой Terminal нажатием ⌘V" ¬
+        display dialog "Terminal.app is not installed." &  return & ¬
+                    "Command:" & return & shellCmd & return & ¬
+                    "in clipboard. Paste it in other Terminal by ⌘V" ¬
                     buttons {"OK"} default button 1 with icon caution
         return
     end if
 
     set bundleID to "com.github.abakum.drt"
     tell application "Terminal"
-        --When the script starts, Terminal sometimes creates an empty first window.
-        --The idea is to open the script in the first window if it doesn't already contain this script,
-        --and if it does contain this script, to open a new window instead.
-
-        if (exists window 1) and not (custom title of first tab of window 1 is bundleID) then
-            try
-                do script shellCmd in window 1
-            on error
+        if (exists window 1) then
+            set currentTab to front tab of window 1
+            set isBusy to busy of currentTab
+            if not isBusy  then
+                try
+                    do script shellCmd in window 1
+                on error
+                    do script shellCmd
+                end try
+            else
                 do script shellCmd
-            end try
+            end if
         else
             do script shellCmd
         end if
-
+        
         set custom title of first tab of front window to bundleID
         activate
-    end tell
+        end tell
 
 end runInput
 
