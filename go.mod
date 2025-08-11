@@ -7,6 +7,7 @@ replace golang.org/x/term => golang.org/x/term v0.10.0
 replace golang.org/x/text => golang.org/x/text v0.20.0
 
 replace golang.org/x/sys => golang.org/x/sys v0.26.0
+replace golang.org/x/tools/gopls => golang.org/x/tools/gopls v0.18.0
 
 require (
 	codeberg.org/gruf/go-ffmpreg v0.6.7

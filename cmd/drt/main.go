@@ -17,7 +17,6 @@ package main
 //go-winres init
 //go get github.com/abakum/version
 //go generate
-//ie4uinit.exe -show
 
 import (
 	"bufio"
