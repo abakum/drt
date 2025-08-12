@@ -84,7 +84,7 @@ func (t *Tags) timeLine(album, in, title, a, fileCSV string, probes ...string) {
 				}
 			}
 		}
-		for _, e := range dots {
+		for _, e := range dots[1:] {
 			res, err = open(p(e))
 			if err == nil {
 				break
